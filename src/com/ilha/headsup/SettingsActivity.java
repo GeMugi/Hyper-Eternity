@@ -1856,16 +1856,30 @@ public class SettingsActivity extends Activity {
         LinearLayout pg = section(page, "Player da gaveta");
         toggle(pg, "Fundo igual às notificações", "O player usa o mesmo vidro das outras notificações, em vez do mais escuro.", Keys.MEDIA_PURE, Keys.D_MEDIA_PURE);
         toggle(pg, "Capa gira e brilha na troca", "Como no ColorOS 17: ao trocar a música, a capa gira e solta um brilho que se espalha pelo cartão.", Keys.ALBUM_GLOW, Keys.D_ALBUM_GLOW);
-        slider(pg, "Brilho: intensidade", "Quão forte o desfoque da capa aparece.", Keys.GLOW_POWER, Keys.D_GLOW_POWER, 10, 100, "%");
+        toggle(pg, "Brilho em onda de luz", "Como no ColorOS 17: uma onda de luz nasce na capa e se espalha pelo cartão, como uma gota na água. Desligado, a capa solta uma mancha desfocada. Posição e distância só valem para a mancha.", Keys.GLOW_SWEEP, Keys.D_GLOW_SWEEP);
+        slider(pg, "Brilho: intensidade", "Quão forte o brilho aparece. Acima de 100% fica mais aceso que o padrão.", Keys.GLOW_POWER, Keys.D_GLOW_POWER, 10, 300, "%");
         slider(pg, "Brilho: tamanho", "Até onde ele se espalha em volta da capa.", Keys.GLOW_SIZE, Keys.D_GLOW_SIZE, 40, 200, "%");
         slider(pg, "Brilho: distância", "Quanto ele desce pelo cartão enquanto some.", Keys.GLOW_DIST, Keys.D_GLOW_DIST, 0, 250, "%");
         slider(pg, "Brilho: posição lateral", "Para a esquerda (negativo) ou direita, em % da capa.", Keys.GLOW_X, Keys.D_GLOW_X, -150, 150, "%");
         slider(pg, "Brilho: posição vertical", "Para cima (negativo) ou para baixo, em % da capa.", Keys.GLOW_Y, Keys.D_GLOW_Y, -100, 150, "%");
         slider(pg, "Brilho: duração", "Mais alto é mais lento.", Keys.GLOW_TIME, Keys.D_GLOW_TIME, 50, 250, "%");
         toggle(pg, "Título com as pontas desfocadas", "Nomes compridos rolam com as pontas desfocadas, em vez de cortadas.", Keys.MEDIA_EDGE, Keys.D_MEDIA_EDGE);
+        toggle(pg, "Cometa na barra (teste)", "A barra do player fica fina e a parte tocada vai da cor da capa até uma ponta branca que brilha, como no iOS.", Keys.COMET_BAR, Keys.D_COMET_BAR);
+        slider(pg, "Cometa: espessura da barra", "Grossura da barra com o cometa. 0 = igual à barra do sistema (sem mudar de tamanho ao pausar).", Keys.COMET_THICK, Keys.D_COMET_THICK, 0, 10, " dp");
+        slider(pg, "Cometa: tamanho da cauda", "Comprimento máximo da cauda. Ela nasce curta e cresce com a música até esse tamanho, abrindo em V para trás.", Keys.COMET_TAIL, Keys.D_COMET_TAIL, 20, 200, " dp");
+        slider(pg, "Cometa: começo apagado", "Quanto o começo da parte tocada fica mais transparente. 0 deixa sólido.", Keys.COMET_FADE, Keys.D_COMET_FADE, 0, 100, "%");
+        slider(pg, "Cometa: brilho", "Quão forte a luz em volta da ponta aparece. 0 tira o brilho.", Keys.COMET_GLOW, Keys.D_COMET_GLOW, 0, 100, "%");
+        slider(pg, "Cometa: tamanho do brilho", "Até onde a luz da ponta se espalha.", Keys.COMET_SIZE, Keys.D_COMET_SIZE, 50, 250, "%");
+        slider(pg, "Cometa: pulsar", "O brilho pulsa no ritmo de um segundo. 0 deixa fixo.", Keys.COMET_PULSE, Keys.D_COMET_PULSE, 0, 100, "%");
+        slider(pg, "Cometa: faíscas", "Pontinhos que ficam para trás enquanto toca. 0 tira.", Keys.COMET_SPARKS, Keys.D_COMET_SPARKS, 0, 10, "");
+        LinearLayout cc = section(page, "Cor do cometa");
+        toggle(cc, "Começo na cor da capa", "O começo da parte tocada pega a cor mais viva da capa, clareada. Desligado, a barra toda usa a cor da ponta.", Keys.COMET_AUTO, Keys.D_COMET_AUTO);
+        colorRow(cc, "Cor da ponta", Keys.COMET_COLOR, 0xFFFFFFFF);
         toggle(pg, "Barra e tempos como no iOS (teste)", "A barra e os tempos ganham o efeito vibrancy do iOS, no tom do vidro. Troca sozinho entre claro e escuro.", Keys.MEDIA_CUT, Keys.D_MEDIA_CUT);
         slider(pg, "iOS: intensidade dos números", "Quanto os tempos clareiam (escuro) ou escurecem (claro) o vidro.", Keys.MV_TEXT, Keys.D_MV_TEXT, 0, 100, "%");
         slider(pg, "iOS: intensidade do trilho", "A parte da barra que ainda falta tocar.", Keys.MV_TRACK, Keys.D_MV_TRACK, 0, 100, "%");
+        toggle(pg, "Vibrance no artista e nos botões (teste)", "O nome do artista e os botões de voltar e pular ganham o efeito vibrancy, como os tempos.", Keys.MEDIA_VIB_PLUS, Keys.D_MEDIA_VIB_PLUS);
+        slider(pg, "Artista e botões: intensidade", "Quanto clareiam (escuro) ou escurecem (claro) o vidro.", Keys.MV_EXTRA, Keys.D_MV_EXTRA, 0, 100, "%");
         slider(pg, "iOS: intensidade da parte tocada", "A parte da barra que já tocou.", Keys.MV_PLAYED, Keys.D_MV_PLAYED, 0, 100, "%");
 
     }

@@ -1,4 +1,4 @@
-# Hyper Eternity miuix (7.9.53): o módulo inteiro com a tela de ajustes em miuix.
+# Hyper Eternity miuix (final): o módulo inteiro com a tela de ajustes em miuix.
 # O código vai compactado em ilha.tar.xz, na raiz deste repositório.
 # O GitHub compila e deixa o APK no ramo "apk" (e o log, se der erro, no ramo "log").
 name: Compilar Hyper Eternity miuix
@@ -61,24 +61,24 @@ jobs:
 
       - name: Separar o APK
         run: |
-          cp miuix/ilha/build/outputs/apk/release/*.apk Hyper-Eternity-miuix-7.9.53.apk
-          ls -l Hyper-Eternity-miuix-7.9.53.apk
+          cp miuix/ilha/build/outputs/apk/release/*.apk Hyper-Eternity.apk
+          ls -l Hyper-Eternity.apk
 
       - name: Guardar o APK
         uses: actions/upload-artifact@v7
         with:
-          name: Hyper-Eternity-miuix-7.9.53.apk
-          path: Hyper-Eternity-miuix-7.9.53.apk
+          name: Hyper-Eternity.apk
+          path: Hyper-Eternity.apk
           archive: false
 
       - name: Publicar no ramo apk
         run: |
           mkdir out && cd out
-          cp ../Hyper-Eternity-miuix-7.9.53.apk .
+          cp ../Hyper-Eternity.apk .
           git init -q && git checkout -q -b apk
-          git add Hyper-Eternity-miuix-7.9.53.apk
+          git add Hyper-Eternity.apk
           git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" \
-            commit -q -m "APK da execução ${{ github.run_number }} (7.9.53)"
+            commit -q -m "APK da execução ${{ github.run_number }} (final)"
           git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" apk
 
       - name: Publicar o log do erro
@@ -89,5 +89,5 @@ jobs:
           git init -q && git checkout -q -b log
           git add build.log
           git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" \
-            commit -q -m "Log da execução ${{ github.run_number }} (7.9.53)"
+            commit -q -m "Log da execução ${{ github.run_number }} (final)"
           git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" log

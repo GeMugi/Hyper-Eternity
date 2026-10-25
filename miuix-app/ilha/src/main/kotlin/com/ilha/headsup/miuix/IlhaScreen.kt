@@ -228,8 +228,8 @@ fun IlhaScreen(store: Store) {
                 },
             ) {
                 TopAppBar(
-                    title = title,
-                    largeTitle = title,
+                    title = tr(title),
+                    largeTitle = tr(title),
                     scrollBehavior = barBehavior,
                     color = if (glassOn) Color.Transparent else surface,
                 )
@@ -262,7 +262,7 @@ fun IlhaScreen(store: Store) {
                     color = if (glassOn) Color.Transparent else MiuixTheme.colorScheme.surfaceContainer,
                 ) {
                     Navs.forEachIndexed { i, label ->
-                        FloatingNavigationBarItem(selected = nav == i, onClick = { pick(i) }, icon = icons[i], label = label)
+                        FloatingNavigationBarItem(selected = nav == i, onClick = { pick(i) }, icon = icons[i], label = tr(label))
                     }
                 }
             } else {
@@ -275,7 +275,7 @@ fun IlhaScreen(store: Store) {
                 ) {
                     NavigationBar(color = if (glassOn) Color.Transparent else surface) {
                         Navs.forEachIndexed { i, label ->
-                            NavigationBarItem(selected = nav == i, onClick = { pick(i) }, icon = icons[i], label = label)
+                            NavigationBarItem(selected = nav == i, onClick = { pick(i) }, icon = icons[i], label = tr(label))
                         }
                     }
                 }
@@ -314,7 +314,7 @@ fun IlhaScreen(store: Store) {
                                 Spacer(Modifier.height(12.dp))
                                 GlassCard(cardBackdrop) {
                                     Categories.forEachIndexed { i, c ->
-                                        ArrowPreference(title = c.first, summary = c.second, onClick = {
+                                        ArrowPreference(title = tr(c.first), summary = tr(c.second), onClick = {
                                             page = i
                                             priv = 0
                                         })
@@ -360,15 +360,15 @@ fun IlhaScreen(store: Store) {
 
         OverlayDialog(
             show = showReset,
-            title = "Restaurar tudo?",
-            summary = "Todos os ajustes do Hyper Eternity voltam ao padrão.",
+            title = tr("Restaurar tudo?"),
+            summary = tr("Todos os ajustes do Hyper Eternity voltam ao padrão."),
             onDismissRequest = { showReset = false },
         ) {
             Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(text = "Cancelar", onClick = { showReset = false }, modifier = Modifier.weight(1f))
+                TextButton(text = tr("Cancelar"), onClick = { showReset = false }, modifier = Modifier.weight(1f))
                 Spacer(Modifier.width(20.dp))
                 TextButton(
-                    text = "Restaurar",
+                    text = tr("Restaurar"),
                     onClick = {
                         store.resetAll()
                         showReset = false
@@ -386,7 +386,7 @@ fun IlhaScreen(store: Store) {
 @Composable
 private fun CardText(text: String) {
     Text(
-        text = text,
+        text = tr(text),
         style = MiuixTheme.textStyles.body2,
         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         modifier = Modifier
@@ -409,8 +409,8 @@ private fun IntSlider(
         value = pref.live.toFloat(),
         onValueChange = { v -> pref.live = ((v / step).roundToInt() * step).coerceIn(min, max) },
         onValueChangeFinished = { pref.save() },
-        title = title,
-        summary = summary,
+        title = tr(title),
+        summary = tr(summary),
         valueText = "${pref.live}$unit",
         valueRange = min.toFloat()..max.toFloat(),
     )
@@ -419,21 +419,22 @@ private fun IntSlider(
 @Composable
 private fun Toggle(pref: BoolPref, title: String, summary: String?) {
     SwitchPreference(
-        title = title,
-        summary = summary,
+        title = tr(title),
+        summary = tr(summary),
         checked = pref.value,
         onCheckedChange = { pref.value = it },
     )
 }
 
 @Composable
-private fun ColorChoice(pref: IntPref, title: String) {
-    val idx = PillColors.indexOfFirst { it.second == pref.value }.let { if (it < 0) 0 else it }
+private fun ColorChoice(pref: IntPref, title: String, withWhite: Boolean = false) {
+    val list = if (withWhite) listOf("Branco" to 0xFFFFFFFF.toInt()) + PillColors else PillColors
+    val idx = list.indexOfFirst { it.second == pref.value }.let { if (it < 0) 0 else it }
     OverlayDropdownPreference(
-        title = title,
-        items = PillColors.map { it.first },
+        title = tr(title),
+        items = list.map { tr(it.first) },
         selectedIndex = idx,
-        onSelectedIndexChange = { pref.value = PillColors[it].second },
+        onSelectedIndexChange = { pref.value = list[it].second },
     )
 }
 
@@ -444,13 +445,13 @@ private fun LazyListScope.section(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     item(key = key) {
-        if (title != null) SmallTitle(text = title) else Spacer(Modifier.height(12.dp))
+        if (title != null) SmallTitle(text = tr(title)) else Spacer(Modifier.height(12.dp))
         GlassCard(backdrop, content = content)
     }
 }
 
 private fun toast(context: Context, text: String) {
-    Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, tr(text), Toast.LENGTH_SHORT).show()
 }
 
 private fun prop(name: String, def: String): String = try {
@@ -564,13 +565,13 @@ private fun LazyListScope.homeTab(store: Store, backdrop: LayerBackdrop?, contex
         ) {
             Column(Modifier.padding(start = 18.dp, top = 20.dp, end = 78.dp, bottom = 40.dp)) {
                 Text(
-                    text = if (ok) "Módulo ativo" else "Módulo não ativo",
+                    text = tr(if (ok) "Módulo ativo" else "Módulo não ativo"),
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Medium,
                     color = MiuixTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = if (ok) "Versão ${store.moduleVersion.value} · os ajustes valem na hora" else "Ative no LSPosed e reinicie a Interface do Sistema",
+                    text = tr(if (ok) "Versão ${store.moduleVersion.value} · os ajustes valem na hora" else "Ative no LSPosed e reinicie a Interface do Sistema"),
                     fontSize = 15.sp,
                     color = MiuixTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(top = 4.dp),
@@ -587,16 +588,16 @@ private fun LazyListScope.homeTab(store: Store, backdrop: LayerBackdrop?, contex
         }
     }
     section("dev", null, backdrop) {
-        BasicComponent(title = "Nome do aparelho", summary = deviceName(context))
-        BasicComponent(title = "Modelo", summary = Build.MODEL)
-        BasicComponent(title = "HyperOS", summary = prop("ro.mi.os.version.incremental", Build.VERSION.INCREMENTAL))
-        BasicComponent(title = "Android", summary = "Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
+        BasicComponent(title = tr("Nome do aparelho"), summary = deviceName(context))
+        BasicComponent(title = tr("Modelo"), summary = Build.MODEL)
+        BasicComponent(title = tr("HyperOS"), summary = prop("ro.mi.os.version.incremental", Build.VERSION.INCREMENTAL))
+        BasicComponent(title = tr("Android"), summary = tr("Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})"))
     }
     section("on", null, backdrop) {
         val n = store.enabledCount.intValue
         ArrowPreference(
-            title = "Recursos",
-            summary = if (n == 0) "Nenhum ligado — tudo vem desligado" else if (n == 1) "1 recurso ligado" else "$n recursos ligados",
+            title = tr("Recursos"),
+            summary = tr(if (n == 0) "Nenhum ligado — tudo vem desligado" else if (n == 1) "1 recurso ligado" else "$n recursos ligados"),
             onClick = onFeatures,
         )
     }
@@ -632,8 +633,8 @@ private fun LazyListScope.headsUpPage(store: Store, backdrop: LayerBackdrop?, co
                 IntSlider(speed, "Velocidade", "Mais rápido encurta a animação; mais lento estica.", 50, 200, "%")
                 IntSlider(bounce, "Bounce", "0% chega sem passar do ponto; 200% dá o dobro de pulo.", 0, 200, "%")
                 ArrowPreference(
-                    title = "Testar heads-up",
-                    summary = "Teste ${if (ios) "iOS" else "OriginOS"}: velocidade ${speed.live}% · bounce ${bounce.live}%",
+                    title = tr("Testar heads-up"),
+                    summary = tr("Teste ${if (ios) "iOS" else "OriginOS"}: velocidade ${speed.live}% · bounce ${bounce.live}%"),
                     onClick = {
                         val r = Bridge.call(context, "test")
                         toast(
@@ -643,8 +644,8 @@ private fun LazyListScope.headsUpPage(store: Store, backdrop: LayerBackdrop?, co
                     },
                 )
                 ArrowPreference(
-                    title = "Permitir flutuante",
-                    summary = "Precisa de \"Notificações flutuantes\" ligado para o Hyper Eternity.",
+                    title = tr("Permitir flutuante"),
+                    summary = tr("Precisa de \"Notificações flutuantes\" ligado para o Hyper Eternity."),
                     onClick = {
                         try {
                             context.startActivity(
@@ -740,7 +741,6 @@ private fun LazyListScope.statusBarPage(store: Store, backdrop: LayerBackdrop?) 
         ColorChoice(store.recColor, "Cor da gravação")
         ColorChoice(store.locColor, "Cor da localização")
         ColorChoice(store.hotColor, "Cor do roteador")
-        CardText("Para uma cor qualquer, use a tela de ajustes do próprio módulo.")
     }
 }
 
@@ -748,16 +748,29 @@ private fun LazyListScope.musicPage(store: Store, backdrop: LayerBackdrop?) {
     section("pg", "Player da gaveta", backdrop) {
         Toggle(store.mediaPure, "Fundo igual às notificações", "O player usa o mesmo vidro das outras notificações, em vez do mais escuro.")
         Toggle(store.albumGlow, "Capa gira e brilha na troca", "Como no ColorOS 17: ao trocar a música, a capa gira e solta um brilho que se espalha pelo cartão.")
-        IntSlider(store.glowPower, "Brilho: intensidade", "Quão forte o desfoque da capa aparece.", 10, 100, "%")
+        Toggle(store.glowSweep, "Brilho em onda de luz", "Como no ColorOS 17: uma onda de luz nasce na capa e se espalha pelo cartão, como uma gota na água. Desligado, a capa solta uma mancha desfocada. Posição e distância só valem para a mancha.")
+        IntSlider(store.glowPower, "Brilho: intensidade", "Quão forte o brilho aparece. Acima de 100% fica mais aceso que o padrão.", 10, 300, "%")
         IntSlider(store.glowSize, "Brilho: tamanho", "Até onde ele se espalha em volta da capa.", 40, 200, "%")
         IntSlider(store.glowDist, "Brilho: distância", "Quanto ele desce pelo cartão enquanto some.", 0, 250, "%")
         IntSlider(store.glowX, "Brilho: posição lateral", "Para a esquerda (negativo) ou direita, em % da capa.", -150, 150, "%")
         IntSlider(store.glowY, "Brilho: posição vertical", "Para cima (negativo) ou para baixo, em % da capa.", -100, 150, "%")
         IntSlider(store.glowTime, "Brilho: duração", "Mais alto é mais lento.", 50, 250, "%")
         Toggle(store.mediaEdge, "Título com as pontas desfocadas", "Nomes compridos rolam com as pontas desfocadas, em vez de cortadas.")
+        Toggle(store.cometBar, "Cometa na barra (teste)", "A barra do player fica fina e a parte tocada vai da cor da capa até uma ponta branca que brilha, como no iOS.")
+        IntSlider(store.cometThick, "Cometa: espessura da barra", "Grossura da barra com o cometa. 0 = igual à barra do sistema (sem mudar de tamanho ao pausar).", 0, 10, " dp", step = 1)
+        IntSlider(store.cometTail, "Cometa: tamanho da cauda", "Comprimento máximo da cauda. Ela nasce curta e cresce com a música até esse tamanho, abrindo em V para trás.", 20, 200, " dp")
+        IntSlider(store.cometFade, "Cometa: começo apagado", "Quanto o começo da parte tocada fica mais transparente. 0 deixa sólido.", 0, 100, "%")
+        IntSlider(store.cometGlow, "Cometa: brilho", "Quão forte a luz em volta da ponta aparece. 0 tira o brilho.", 0, 100, "%")
+        IntSlider(store.cometSize, "Cometa: tamanho do brilho", "Até onde a luz da ponta se espalha.", 50, 250, "%")
+        IntSlider(store.cometPulse, "Cometa: pulsar", "O brilho pulsa no ritmo de um segundo. 0 deixa fixo.", 0, 100, "%")
+        IntSlider(store.cometSparks, "Cometa: faíscas", "Pontinhos que ficam para trás enquanto toca. 0 tira.", 0, 10, "", step = 1)
+        Toggle(store.cometAuto, "Começo na cor da capa", "O começo da parte tocada pega a cor mais viva da capa, clareada. Desligado, a barra toda usa a cor da ponta.")
+        ColorChoice(store.cometColor, "Cor da ponta", withWhite = true)
         Toggle(store.mediaCut, "Barra e tempos como no iOS (teste)", "A barra e os tempos ganham o efeito vibrancy do iOS, no tom do vidro.")
         IntSlider(store.mvText, "iOS: intensidade dos números", "Quanto os tempos clareiam (escuro) ou escurecem (claro) o vidro.", 0, 100, "%")
         IntSlider(store.mvTrack, "iOS: intensidade do trilho", "A parte da barra que ainda falta tocar.", 0, 100, "%")
+        Toggle(store.mediaVibPlus, "Vibrance no artista e nos botões (teste)", "O nome do artista e os botões de voltar e pular ganham o efeito vibrancy, como os tempos.")
+        IntSlider(store.mvExtra, "Artista e botões: intensidade", "Quanto clareiam (escuro) ou escurecem (claro) o vidro.", 0, 100, "%")
         IntSlider(store.mvPlayed, "iOS: intensidade da parte tocada", "A parte da barra que já tocou.", 0, 100, "%")
     }
 }
@@ -777,9 +790,9 @@ private fun LazyListScope.privacyPage(
         val na = store.privApps.value.size
         val nc = store.privConvs.value.size
         val nk = store.privContacts.value.size
-        ArrowPreference(title = "Apps", summary = if (na == 0) "Nenhum escolhido" else "$na ${if (na == 1) "app" else "apps"} com tudo escondido", onClick = onApps)
-        ArrowPreference(title = "Conversas", summary = if (nc == 0) "Nenhuma escolhida · só as de apps de mensagem" else "$nc ${if (nc == 1) "conversa" else "conversas"}", onClick = onConvs)
-        ArrowPreference(title = "Contatos", summary = if (nk == 0) "Nenhum escolhido · vale em qualquer app de mensagem" else "$nk ${if (nk == 1) "contato" else "contatos"}", onClick = onContacts)
+        ArrowPreference(title = tr("Apps"), summary = tr(if (na == 0) "Nenhum escolhido" else "$na ${if (na == 1) "app" else "apps"} com tudo escondido"), onClick = onApps)
+        ArrowPreference(title = tr("Conversas"), summary = tr(if (nc == 0) "Nenhuma escolhida · só as de apps de mensagem" else "$nc ${if (nc == 1) "conversa" else "conversas"}"), onClick = onConvs)
+        ArrowPreference(title = tr("Contatos"), summary = tr(if (nk == 0) "Nenhum escolhido · vale em qualquer app de mensagem" else "$nk ${if (nk == 1) "contato" else "contatos"}"), onClick = onContacts)
         CardText("Conversas aparecem na lista depois da primeira notificação delas. Contatos valem pelo nome salvo na agenda.")
     }
 }
@@ -803,7 +816,7 @@ private fun LazyListScope.privacyApps(store: Store, backdrop: LayerBackdrop?) {
                 }
             }
         }
-        SmallTitle(text = "Toque para esconder o conteúdo do app")
+        SmallTitle(text = tr("Toque para esconder o conteúdo do app"))
         GlassCard(backdrop) {
             val list = apps
             if (list == null) {
@@ -811,8 +824,8 @@ private fun LazyListScope.privacyApps(store: Store, backdrop: LayerBackdrop?) {
             } else {
                 list.forEach { a ->
                     SwitchPreference(
-                        title = a.label,
-                        summary = a.pkg,
+                        title = tr(a.label),
+                        summary = tr(a.pkg),
                         checked = store.privApps.has(a.pkg),
                         onCheckedChange = { store.privApps.set(a.pkg, it) },
                         startAction = {
@@ -836,13 +849,13 @@ private fun LazyListScope.privacyConvApps(store: Store, backdrop: LayerBackdrop?
             if (f.size < 3) continue
             counts[f[0]] = (counts[f[0]] ?: 0) + 1
         }
-        SmallTitle(text = "Escolha o app")
+        SmallTitle(text = tr("Escolha o app"))
         GlassCard(backdrop) {
             if (counts.isEmpty()) {
                 CardText("Nenhuma conversa ainda. Elas aparecem aqui depois da primeira notificação.")
             } else {
                 counts.forEach { (pkg, n) ->
-                    ArrowPreference(title = appLabel(context, pkg), summary = "$n ${if (n == 1) "conversa" else "conversas"}", onClick = { onPick(pkg) })
+                    ArrowPreference(title = appLabel(context, pkg), summary = tr("$n ${if (n == 1) "conversa" else "conversas"}"), onClick = { onPick(pkg) })
                 }
             }
         }
@@ -855,7 +868,7 @@ private fun LazyListScope.privacyConvs(store: Store, backdrop: LayerBackdrop?, p
             .map { it.split("|", limit = 3) }
             .filter { it.size == 3 && it[0] == pkg }
             .sortedBy { it[2].lowercase() }
-        SmallTitle(text = "Toque para esconder a conversa")
+        SmallTitle(text = tr("Toque para esconder a conversa"))
         GlassCard(backdrop) {
             list.forEach { f ->
                 val id = f[0] + "|" + f[1]
@@ -893,7 +906,7 @@ private fun LazyListScope.privacyContacts(store: Store, backdrop: LayerBackdrop?
                 set.toList()
             }
         }
-        SmallTitle(text = "Toque para esconder as mensagens do contato")
+        SmallTitle(text = tr("Toque para esconder as mensagens do contato"))
         GlassCard(backdrop) {
             val list = names
             when {
@@ -902,7 +915,7 @@ private fun LazyListScope.privacyContacts(store: Store, backdrop: LayerBackdrop?
                 else -> list.forEach { nm ->
                     val k = nm.lowercase()
                     SwitchPreference(
-                        title = nm,
+                        title = tr(nm),
                         checked = store.privContacts.has(k),
                         onCheckedChange = { store.privContacts.set(k, it) },
                     )
@@ -924,8 +937,8 @@ private fun LazyListScope.extensionsTab(store: Store, backdrop: LayerBackdrop?, 
     section("mu", "Capa e letras no bloqueio", backdrop) {
         CardText("Player do bloqueio com capa em destaque e letras sincronizadas, do HyperMusicCover-Enhanced.")
         ArrowPreference(
-            title = "Abrir ajustes da música",
-            summary = "A tela da música é a original, em inglês.",
+            title = tr("Abrir ajustes da música"),
+            summary = tr("A tela da música é a original, em inglês."),
             onClick = {
                 try {
                     context.startActivity(
@@ -961,26 +974,36 @@ private fun LazyListScope.settingsTab(
 ) {
     section("ap", "Aparência", backdrop) {
         OverlayDropdownPreference(
-            title = "Tema do app",
-            items = ColorModes,
+            title = tr("Tema do app"),
+            items = ColorModes.map { tr(it) },
             selectedIndex = store.colorMode.value,
             onSelectedIndexChange = { store.colorMode.value = it },
         )
+        OverlayDropdownPreference(
+            title = tr("Idioma do app"),
+            items = listOf(tr("Automático"), "Português", "English"),
+            selectedIndex = store.lang.value,
+            onSelectedIndexChange = {
+                store.lang.value = it
+                I18n.setup(it)
+            },
+        )
+        if (I18n.en) CardText("Os ajustes da música (HyperMusicCover) seguem em inglês.")
         SwitchPreference(
-            title = "Barra de navegação flutuante",
-            summary = "Desligada, a barra fica presa embaixo, de ponta a ponta.",
+            title = tr("Barra de navegação flutuante"),
+            summary = tr("Desligada, a barra fica presa embaixo, de ponta a ponta."),
             checked = store.floatingNav.value,
             onCheckedChange = { store.floatingNav.value = it },
         )
         SwitchPreference(
-            title = "Fundo colorido animado",
-            summary = "O degradê do HyperOS 3 atrás das telas.",
+            title = tr("Fundo colorido animado"),
+            summary = tr("O degradê do HyperOS 3 atrás das telas."),
             checked = store.animatedBg.value,
             onCheckedChange = { store.animatedBg.value = it },
         )
         SwitchPreference(
-            title = "Vidro fosco",
-            summary = if (shaderOk) "Os cartões desfocam o que está atrás deles." else "Este aparelho não tem o recurso de desfoque que o miuix usa.",
+            title = tr("Vidro fosco"),
+            summary = tr(if (shaderOk) "Os cartões desfocam o que está atrás deles." else "Este aparelho não tem o recurso de desfoque que o miuix usa."),
             checked = store.glass.value,
             enabled = shaderOk,
             onCheckedChange = { store.glass.value = it },
@@ -989,7 +1012,7 @@ private fun LazyListScope.settingsTab(
     section("lo", "Registros", backdrop) {
         CardText("Os registros ficam no LSPosed (Registros → Módulos). Copie o resumo abaixo para mandar junto.")
         ArrowPreference(
-            title = "Copiar resumo dos ajustes",
+            title = tr("Copiar resumo dos ajustes"),
             onClick = {
                 try {
                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -1002,17 +1025,17 @@ private fun LazyListScope.settingsTab(
         )
     }
     section("ie", "Importar e exportar", backdrop) {
-        ArrowPreference(title = "Exportar", summary = "Salva todos os ajustes num arquivo.", onClick = onExport)
-        ArrowPreference(title = "Importar", summary = "Carrega os ajustes de um arquivo.", onClick = onImport)
+        ArrowPreference(title = tr("Exportar"), summary = tr("Salva todos os ajustes num arquivo."), onClick = onExport)
+        ArrowPreference(title = tr("Importar"), summary = tr("Carrega os ajustes de um arquivo."), onClick = onImport)
         CardText("Salva ou carrega todos os ajustes num arquivo. A música tem o próprio importar/exportar.")
     }
     section("sys", "Sistema", backdrop) {
         ArrowPreference(
-            title = "Reiniciar Interface do Sistema",
-            summary = "Precisa de root.",
+            title = tr("Reiniciar Interface do Sistema"),
+            summary = tr("Precisa de root."),
             onClick = { Bridge.call(context, "restart") },
         )
-        ArrowPreference(title = "Restaurar tudo", summary = "Volta todos os ajustes ao padrão.", onClick = onReset)
+        ArrowPreference(title = tr("Restaurar tudo"), summary = tr("Volta todos os ajustes ao padrão."), onClick = onReset)
     }
 }
 
@@ -1028,20 +1051,20 @@ private fun LazyListScope.aboutTab(backdrop: LayerBackdrop?, uriHandler: UriHand
         ) {
             AnimatedAvatar(Modifier.size(128.dp))
             Text(
-                text = "Fabulous Lightning McQ",
+                text = tr("Fabulous Lightning McQ"),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Medium,
                 color = MiuixTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 12.dp),
             )
-            Text(text = "@Gmugi", fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            Text(text = tr("@Gmugi"), fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         }
     }
     section("tg", "Telegram", backdrop) {
         ArrowPreference(
-            title = "Gmugi 愛",
-            summary = "t.me/GmugiUwu",
+            title = tr("Gmugi 愛"),
+            summary = tr("t.me/GmugiUwu"),
             startAction = {
                 Image(
                     painter = painterResource(R.drawable.eternity_channel),
@@ -1057,8 +1080,8 @@ private fun LazyListScope.aboutTab(backdrop: LayerBackdrop?, uriHandler: UriHand
     }
     section("gh", "GitHub", backdrop) {
         ArrowPreference(
-            title = "GeMugi/Hyper-Eternity",
-            summary = "github.com/GeMugi/Hyper-Eternity",
+            title = tr("GeMugi/Hyper-Eternity"),
+            summary = tr("github.com/GeMugi/Hyper-Eternity"),
             startAction = {
                 Image(
                     painter = painterResource(R.drawable.ilha_logo),
@@ -1073,9 +1096,9 @@ private fun LazyListScope.aboutTab(backdrop: LayerBackdrop?, uriHandler: UriHand
         )
     }
     section("cr", "Créditos e licença", backdrop) {
-        ArrowPreference(title = "HyperMusicCover", summary = "Autor original: zyl6932", onClick = { uriHandler.openUri("https://github.com/zyl6932/HyperMusicCover") })
-        ArrowPreference(title = "HyperMusicCover-Enhanced", summary = "Versão melhorada: Lewewe", onClick = { uriHandler.openUri("https://github.com/Lewewe/HyperMusicCover-Enhanced") })
-        ArrowPreference(title = "miuix", summary = "Componentes e desfoque desta tela (Apache 2.0)", onClick = { uriHandler.openUri("https://github.com/compose-miuix-ui/miuix") })
+        ArrowPreference(title = tr("HyperMusicCover"), summary = tr("Autor original: zyl6932"), onClick = { uriHandler.openUri("https://github.com/zyl6932/HyperMusicCover") })
+        ArrowPreference(title = tr("HyperMusicCover-Enhanced"), summary = tr("Versão melhorada: Lewewe"), onClick = { uriHandler.openUri("https://github.com/Lewewe/HyperMusicCover-Enhanced") })
+        ArrowPreference(title = tr("miuix"), summary = tr("Componentes e desfoque desta tela (Apache 2.0)"), onClick = { uriHandler.openUri("https://github.com/compose-miuix-ui/miuix") })
         CardText("O HyperMusicCover e o HyperMusicCover-Enhanced são AGPL v3.0, e o Hyper Eternity também.")
     }
 }

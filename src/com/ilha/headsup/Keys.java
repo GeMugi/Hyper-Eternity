@@ -8,7 +8,7 @@ public final class Keys {
     public static final String FILE = "ajustes";
     /** Grupo das preferências remotas do LSPosed (o app escreve, a Interface do Sistema lê). */
     public static final String GROUP = "ilha";
-    public static final String VERSION = "7.9.54";
+    public static final String VERSION = "7.9.55";
 
     public static final String HU_ENABLED = "hu_enabled";
     public static final String HU_STYLE = "hu_style";        // 0 = OriginOS (sai da ilha), 1 = iOS (sai do ícone do app)
@@ -46,6 +46,8 @@ public final class Keys {
     public static final String CONV_SPLIT = "conv_split";    // cada mensagem num cartão novo (no sistema)
     public static final String CONV_MIUI = "conv_miui";      // conversas montadas no modelo do HyperOS
     public static final String MEDIA_CUT = "media_cut";
+    public static final String MEDIA_VIB_PLUS = "media_vib_plus", MV_EXTRA = "mv_extra";   // vibrance no artista e nos botões de pular
+    public static final String COMET_BAR = "comet_bar";      // cometa na ponta da barra do player
     public static final String NOTIF_VIB = "notif_vib", BODY_VIB = "body_vib", BODY_VIB_N = "body_vib_n", GLASS_EDGE = "glass_edge", GLASS_EDGE_N = "glass_edge_n";
     public static final String NOTIF_GLASS = "notif_glass";
     public static final String FROST = "frost", FROST_BLUR = "frost_blur", FROST_REFR = "frost_refr", FROST_SAT = "frost_sat", FROST_VEIL = "frost_veil";
@@ -98,6 +100,9 @@ public final class Keys {
     public static final boolean D_KG_HIDE = false;
     public static final boolean D_MEDIA_EDGE = false;
     public static final boolean D_MEDIA_CUT = false;
+    public static final boolean D_COMET_BAR = false;
+    public static final boolean D_MEDIA_VIB_PLUS = false;
+    public static final int D_MV_EXTRA = 70;
     public static final boolean D_NOTIF_VIB = false;
     public static final boolean D_NOTIF_BLOOM = false;
     public static final String MODAL_FULL = "modal_full", LINES4 = "lines4";
@@ -114,6 +119,11 @@ public final class Keys {
     public static final int D_FROST_BLUR = 60, D_FROST_REFR = 50, D_FROST_SAT = 40, D_FROST_VEIL = 30;
     public static final int D_BLOOM_POWER = 100;
     public static final int D_MV_TEXT = 45, D_MV_TRACK = 22, D_MV_PLAYED = 85;
+    // cometa: rastro (dp e %), brilho (%), tamanho da cabeça (%), pulso (%), faíscas (quantas) e cor
+    public static final String COMET_TAIL = "comet_tail", COMET_TAIL_A = "comet_tail_a", COMET_GLOW = "comet_glow", COMET_SIZE = "comet_size",
+            COMET_PULSE = "comet_pulse", COMET_SPARKS = "comet_sparks", COMET_COLOR = "comet_color", COMET_FADE = "comet_fade", COMET_THICK = "comet_thick", COMET_AUTO = "comet_auto";
+    public static final int D_COMET_TAIL = 60, D_COMET_TAIL_A = 80, D_COMET_GLOW = 60, D_COMET_SIZE = 100, D_COMET_PULSE = 0, D_COMET_SPARKS = 0, D_COMET_FADE = 15, D_COMET_THICK = 0;
+    public static final boolean D_COMET_AUTO = true;
     public static final int D_LYRIC_SHIFT = 0;
     public static final boolean D_ALBUM_GLOW = false;
     public static final boolean D_GROUP_STACK = false;
@@ -128,6 +138,8 @@ public final class Keys {
     public static final int D_GLOW_X = 0;
     public static final int D_GLOW_Y = 0;
     public static final int D_GLOW_TIME = 100;
+    public static final String GLOW_SWEEP = "glow_sweep";   // brilho em faixa de luz (ColorOS 17) em vez da mancha da capa
+    public static final boolean D_GLOW_SWEEP = true;
 
     // modo de segurança
     public static final String SAFE_LAST = "safe_last";      // última opção ligada

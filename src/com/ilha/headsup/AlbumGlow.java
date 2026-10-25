@@ -199,6 +199,8 @@ final class AlbumGlow {
 
     // ------------------------------------------------------------------ giro
 
+    static boolean lastPositive = true;
+
     static void flip(final View v, boolean positive, final Runnable onSwap) {
         Object old = v.getTag(TAG_FLIP);
         Object last = v.getTag(TAG_LAST);
@@ -208,6 +210,7 @@ final class AlbumGlow {
             return;
         }
         v.setTag(TAG_LAST, Long.valueOf(SystemClock.uptimeMillis()));
+        lastPositive = positive;
         v.setRotationY(0f);
         final Round round = Round.hold(v);
         final float dir = positive ? 1f : -1f;
@@ -488,7 +491,7 @@ final class AlbumGlow {
             target.getOverlay().add(this);
             added = true;
             anim = ValueAnimator.ofFloat(0f, 1f);
-            anim.setDuration(Math.round(1400L * Prefs.glowTime / 100f));
+            anim.setDuration(Math.round((Prefs.glowStyle == 1 ? 1550L : 1400L) * Prefs.glowTime / 100f));
             anim.setInterpolator(new LinearInterpolator());
             anim.addUpdateListener(this);
             anim.addListener(this);
@@ -501,8 +504,81 @@ final class AlbumGlow {
             invalidateSelf();
         }
 
+        final Paint sweepP = new Paint(Paint.ANTI_ALIAS_FLAG);
+        final boolean forward = lastPositive;
+        int tintC = 0;
+
+        /** Cor da luz: branca com um pouco da cor média da capa. */
+        int sweepColor() {
+            if (tintC != 0) return tintC;
+            long r = 0, g = 0, b = 0;
+            int n = 0;
+            for (int y = 0; y < art.getHeight(); y += 4)
+                for (int x = 0; x < art.getWidth(); x += 4) {
+                    int px = art.getPixel(x, y);
+                    r += (px >> 16) & 255;
+                    g += (px >> 8) & 255;
+                    b += px & 255;
+                    n++;
+                }
+            if (n == 0) return tintC = 0xFFFFFFFF;
+            float f = 0.35f;
+            int rr = Math.round(255 * (1 - f) + r / n * f), gg = Math.round(255 * (1 - f) + g / n * f), bb = Math.round(255 * (1 - f) + b / n * f);
+            return tintC = 0xFF000000 | (rr << 16) | (gg << 8) | bb;
+        }
+
+        /**
+         * Como no ColorOS 17: depois do giro, uma onda de luz nasce na capa e se espalha pelo cartão
+         * todo, como a ondulação de uma gota na água, ficando mais fraca enquanto cresce.
+         */
+        void sweep(Canvas c) {
+            float k = Prefs.glowTime / 100f;
+            float dur = 1500f * k;
+            float q = clamp(t / dur);
+            float W = getBounds().width(), H = getBounds().height();
+            // centro da capa, em coordenadas da camada
+            float l = album.getLeft(), tp = album.getTop();
+            View p = (View) album.getParent();
+            while (p != null && p != host && p.getParent() instanceof View) {
+                l += p.getLeft();
+                tp += p.getTop();
+                p = (View) p.getParent();
+            }
+            float cx = l + album.getWidth() / 2f - target.getLeft();
+            float cy = tp + album.getHeight() / 2f - target.getTop();
+            float r0 = Math.max(album.getWidth(), album.getHeight()) * 0.5f;
+            // até o canto mais longe do cartão
+            float far = (float) Math.max(Math.max(Math.hypot(cx, cy), Math.hypot(W - cx, cy)), Math.max(Math.hypot(cx, H - cy), Math.hypot(W - cx, H - cy)));
+            float sz = Prefs.glowSize / 100f;
+            float band = Math.max(18f * density, Math.min(W, H) * 0.22f * sz);
+            // cresce rápido no começo e vai freando, como a onda na água
+            float grow = 1f - (1f - q) * (1f - q);
+            float R = r0 + (far + band - r0) * grow;
+            float rise = SOFT.getInterpolation(clamp(t / (180f * k)));
+            float a = Prefs.glowPower / 100f * 0.32f * rise * (1f - q) * (1f - q * 0.35f);
+            if (a <= 0.01f) return;
+            int col = sweepColor() & 0x00FFFFFF;
+            int peak = (Math.round(255 * Math.min(1f, a)) << 24) | col;
+            float outer = R + band * 0.5f;
+            float inner = Math.max(0f, (R - band) / outer), mid = R / outer;
+            sweepP.setShader(new android.graphics.RadialGradient(cx, cy, outer,
+                    new int[]{col, col, peak, col}, new float[]{0f, inner, mid, 1f}, Shader.TileMode.CLAMP));
+            int save = c.save();
+            float rr = radius();
+            clip.reset();
+            clip.addRoundRect(0f, 0f, W, H, rr, rr, android.graphics.Path.Direction.CW);
+            c.clipPath(clip);
+            c.drawRect(0f, 0f, W, H, sweepP);
+            c.restoreToCount(save);
+            sweepP.setShader(null);
+        }
+
         public void draw(Canvas c) {
             if (done || art == null || !c.isHardwareAccelerated()) return;
+            if (Prefs.glowStyle == 1) {
+                sweep(c);
+                return;
+            }
             float k = Prefs.glowTime / 100f;
             float rise = OUT.getInterpolation(clamp(t / (160f * k)));
             float fade = SOFT.getInterpolation(clamp((t - 220f * k) / (1150f * k)));

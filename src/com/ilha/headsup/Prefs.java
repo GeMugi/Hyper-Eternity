@@ -30,6 +30,10 @@ final class Prefs {
     static boolean kgEnabled, kgScroll, kgIos, kgClock, kgClockFixed, kgBlur, kgHmc, kgKeep;
     static int kgOffset, kgStart;
     static int mvText = Keys.D_MV_TEXT, mvTrack = Keys.D_MV_TRACK, mvPlayed = Keys.D_MV_PLAYED;
+    static int mvExtra = Keys.D_MV_EXTRA;
+    static int cometTail = Keys.D_COMET_TAIL, cometTailA = Keys.D_COMET_TAIL_A, cometGlow = Keys.D_COMET_GLOW, cometSize = Keys.D_COMET_SIZE,
+            cometPulse = Keys.D_COMET_PULSE, cometSparks = Keys.D_COMET_SPARKS, cometColor = 0xFFFFFFFF, cometFade = Keys.D_COMET_FADE, cometThick = Keys.D_COMET_THICK;
+    static boolean cometAuto = Keys.D_COMET_AUTO;
     static int bloomPower = Keys.D_BLOOM_POWER;
     static int frostBlur = Keys.D_FROST_BLUR, frostRefr = Keys.D_FROST_REFR, frostSat = Keys.D_FROST_SAT, frostVeil = Keys.D_FROST_VEIL;
     static boolean pillVib, shadeSheet, sheetBlur, sheetRound;
@@ -41,10 +45,10 @@ final class Prefs {
     static int recColor = 0xFFFF3B30, locColor = 0xFF0A84FF, hotColor = 0xFF34C759;
     static boolean modalFull, lines4, recPill, locPill, hotPill;
     static int linesN = Keys.D_LINES_N;
-    static boolean frost, notifGlass, notifBloom, notifVib, mediaCut, convTime, convNoExpand, convMiui, mediaEdge, albumGlow = Keys.D_ALBUM_GLOW, mediaPure = Keys.D_MEDIA_PURE, groupStack = Keys.D_GROUP_STACK;
+    static boolean frost, notifGlass, notifBloom, notifVib, mediaCut, cometBar, mediaVibPlus, convTime, convNoExpand, convMiui, mediaEdge, albumGlow = Keys.D_ALBUM_GLOW, mediaPure = Keys.D_MEDIA_PURE, groupStack = Keys.D_GROUP_STACK;
     static int lyricShift = Keys.D_LYRIC_SHIFT;
     static int glowPower = Keys.D_GLOW_POWER, glowSize = Keys.D_GLOW_SIZE, glowDist = Keys.D_GLOW_DIST,
-            glowX = Keys.D_GLOW_X, glowY = Keys.D_GLOW_Y, glowTime = Keys.D_GLOW_TIME;
+            glowX = Keys.D_GLOW_X, glowY = Keys.D_GLOW_Y, glowTime = Keys.D_GLOW_TIME, glowStyle = Keys.D_GLOW_SWEEP ? 1 : 0;
     static boolean kgHide = Keys.D_KG_HIDE;
     static boolean privOn = Keys.D_PRIV_ON, privUnlocked = Keys.D_PRIV_UNLOCKED;
     static java.util.Set<String> privApps = new java.util.HashSet<>(), privConvs = new java.util.HashSet<>(), privContacts = new java.util.HashSet<>();
@@ -177,6 +181,9 @@ final class Prefs {
         convMiui = b(p, Keys.CONV_MIUI, Keys.D_CONV_MIUI);
         mediaEdge = b(p, Keys.MEDIA_EDGE, Keys.D_MEDIA_EDGE);
         mediaCut = b(p, Keys.MEDIA_CUT, Keys.D_MEDIA_CUT);
+        cometBar = b(p, Keys.COMET_BAR, Keys.D_COMET_BAR);
+        mediaVibPlus = b(p, Keys.MEDIA_VIB_PLUS, Keys.D_MEDIA_VIB_PLUS);
+        mvExtra = clamp(p.getInt(Keys.MV_EXTRA, Keys.D_MV_EXTRA), 0, 100);
         notifVib = b(p, Keys.NOTIF_VIB, Keys.D_NOTIF_VIB);
         bodyVib = b(p, Keys.BODY_VIB, false);
         sheetLockClock = b(p, Keys.SHEET_LOCKCLOCK, false);
@@ -210,15 +217,26 @@ final class Prefs {
         mvText = clamp(p.getInt(Keys.MV_TEXT, Keys.D_MV_TEXT), 0, 100);
         mvTrack = clamp(p.getInt(Keys.MV_TRACK, Keys.D_MV_TRACK), 0, 100);
         mvPlayed = clamp(p.getInt(Keys.MV_PLAYED, Keys.D_MV_PLAYED), 0, 100);
+        cometTail = clamp(p.getInt(Keys.COMET_TAIL, Keys.D_COMET_TAIL), 20, 200);
+        cometTailA = clamp(p.getInt(Keys.COMET_TAIL_A, Keys.D_COMET_TAIL_A), 0, 100);
+        cometGlow = clamp(p.getInt(Keys.COMET_GLOW, Keys.D_COMET_GLOW), 0, 100);
+        cometSize = clamp(p.getInt(Keys.COMET_SIZE, Keys.D_COMET_SIZE), 50, 250);
+        cometPulse = clamp(p.getInt(Keys.COMET_PULSE, Keys.D_COMET_PULSE), 0, 100);
+        cometSparks = clamp(p.getInt(Keys.COMET_SPARKS, Keys.D_COMET_SPARKS), 0, 10);
+        cometColor = p.getInt(Keys.COMET_COLOR, 0xFFFFFFFF) | 0xFF000000;
+        cometFade = clamp(p.getInt(Keys.COMET_FADE, Keys.D_COMET_FADE), 0, 100);
+        cometThick = clamp(p.getInt(Keys.COMET_THICK, Keys.D_COMET_THICK), 0, 10);
+        cometAuto = b(p, Keys.COMET_AUTO, Keys.D_COMET_AUTO);
         albumGlow = b(p, Keys.ALBUM_GLOW, Keys.D_ALBUM_GLOW);
         mediaPure = b(p, Keys.MEDIA_PURE, Keys.D_MEDIA_PURE);
         groupStack = b(p, Keys.GROUP_STACK, Keys.D_GROUP_STACK);
-        glowPower = clamp(p.getInt(Keys.GLOW_POWER, Keys.D_GLOW_POWER), 10, 100);
+        glowPower = clamp(p.getInt(Keys.GLOW_POWER, Keys.D_GLOW_POWER), 10, 300);
         glowSize = clamp(p.getInt(Keys.GLOW_SIZE, Keys.D_GLOW_SIZE), 40, 200);
         glowDist = clamp(p.getInt(Keys.GLOW_DIST, Keys.D_GLOW_DIST), 0, 250);
         glowX = clamp(p.getInt(Keys.GLOW_X, Keys.D_GLOW_X), -150, 150);
         glowY = clamp(p.getInt(Keys.GLOW_Y, Keys.D_GLOW_Y), -100, 150);
         glowTime = clamp(p.getInt(Keys.GLOW_TIME, Keys.D_GLOW_TIME), 50, 250);
+        glowStyle = b(p, Keys.GLOW_SWEEP, Keys.D_GLOW_SWEEP) ? 1 : 0;
         kgHide = b(p, Keys.KG_HIDE, Keys.D_KG_HIDE);
         privOn = b(p, Keys.PRIV_ON, Keys.D_PRIV_ON);
         privUnlocked = b(p, Keys.PRIV_UNLOCKED, Keys.D_PRIV_UNLOCKED);

@@ -14,6 +14,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = Store(this, getSharedPreferences("visual", Context.MODE_PRIVATE))
+        I18n.setup(store.lang.value)
         store.reload()
 
         setContent {
