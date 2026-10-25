@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <package android:name="org.lsposed.manager" />
+        <package android:name="com.ilha.headsup.music" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tg" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:description="@string/ilha_description"
+        android:enableOnBackInvokedCallback="true"
+        android:icon="@mipmap/ilha_launcher"
+        android:roundIcon="@mipmap/ilha_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Ilha"
+        tools:ignore="UnusedAttribute">
+        <activity
+            android:name="com.ilha.headsup.miuix.MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="de.robv.android.xposed.category.MODULE_SETTINGS" />
+            </intent-filter>
+        </activity>
+        <receiver android:name="com.ilha.headsup.PrivReceiver" android:exported="true">
+            <intent-filter><action android:name="com.ilha.headsup.CONV_SEEN" /></intent-filter>
+        </receiver>
+        <receiver android:name="com.ilha.headsup.SafeReceiver" android:exported="true">
+            <intent-filter><action android:name="com.ilha.headsup.SAFE_OFF" /></intent-filter>
+        </receiver>
+        <provider
+            android:name="com.ilha.headsup.BridgeProvider"
+            android:authorities="com.ilha.headsup.bridge"
+            android:exported="false" />
+        <provider
+            android:name="com.ilha.headsup.ServiceProvider"
+            android:authorities="com.ilha.headsup.XposedService"
+            android:exported="true"
+            android:initOrder="1000" />
+        <meta-data android:name="xposedmodule" android:value="true" />
+        <meta-data android:name="xposeddescription" android:value="@string/ilha_description" />
+        <meta-data android:name="xposedminversion" android:value="102" />
+        <meta-data android:name="xposedscope" android:resource="@array/xposedscope" />
+    </application>
+
+</manifest>

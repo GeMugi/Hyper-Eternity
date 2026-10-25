@@ -1,0 +1,93 @@
+# Hyper Eternity miuix (7.9.53): o módulo inteiro com a tela de ajustes em miuix.
+# O código vai compactado em ilha.tar.xz, na raiz deste repositório.
+# O GitHub compila e deixa o APK no ramo "apk" (e o log, se der erro, no ramo "log").
+name: Compilar Hyper Eternity miuix
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Versão do miuix usada (commit de 15/10/2026). A prévia é compilada dentro do código dele.
+  MIUIX_COMMIT: f36cbc904e81a94a779f87209326b460d2786b4e
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Baixar este repositório
+        uses: actions/checkout@v5
+        with:
+          path: repo
+
+      - name: Baixar o miuix
+        run: |
+          git init -q miuix
+          cd miuix
+          git remote add origin https://github.com/compose-miuix-ui/miuix.git
+          git fetch -q --depth 1 origin "$MIUIX_COMMIT"
+          git checkout -q --detach FETCH_HEAD
+
+      - name: Colocar a prévia dentro do miuix
+        run: |
+          tar -xJf repo/ilha.tar.xz -C miuix
+          printf '\ninclude(":ilha")\n' >> miuix/settings.gradle.kts
+          # Memória mais modesta que a do miuix (8 GB), para caber nas máquinas de repositório privado.
+          sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8/' miuix/gradle.properties
+          printf '\nkotlin.daemon.jvmargs=-Xmx2560m\n' >> miuix/gradle.properties
+          ls -R miuix/ilha | head -50
+
+      - name: Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: "zulu"
+          java-version: "21"
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Compilar
+        working-directory: miuix
+        run: |
+          set -o pipefail
+          ./gradlew :ilha:assembleRelease --stacktrace 2>&1 | tee ../build.log
+
+      - name: Separar o APK
+        run: |
+          cp miuix/ilha/build/outputs/apk/release/*.apk Hyper-Eternity-miuix-7.9.53.apk
+          ls -l Hyper-Eternity-miuix-7.9.53.apk
+
+      - name: Guardar o APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: Hyper-Eternity-miuix-7.9.53.apk
+          path: Hyper-Eternity-miuix-7.9.53.apk
+          archive: false
+
+      - name: Publicar no ramo apk
+        run: |
+          mkdir out && cd out
+          cp ../Hyper-Eternity-miuix-7.9.53.apk .
+          git init -q && git checkout -q -b apk
+          git add Hyper-Eternity-miuix-7.9.53.apk
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" \
+            commit -q -m "APK da execução ${{ github.run_number }} (7.9.53)"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" apk
+
+      - name: Publicar o log do erro
+        if: failure()
+        run: |
+          mkdir logout && cd logout
+          if [ -f ../build.log ]; then tail -c 900000 ../build.log > build.log; else echo "sem log (falhou antes de compilar)" > build.log; fi
+          git init -q && git checkout -q -b log
+          git add build.log
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" \
+            commit -q -m "Log da execução ${{ github.run_number }} (7.9.53)"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" log

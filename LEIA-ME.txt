@@ -1,0 +1,10 @@
+Hyper Eternity — como compilar
+
+src/          Hooks do LSPosed (Java). Compile com javac contra um android.jar completo
+              (com as APIs internas do Android) e apistubs/ no sourcepath:
+                javac -source 8 -target 8 -cp android.jar -sourcepath apistubs -d cls $(find src -name '*.java')
+              Junte as classes de com/ilha (sem SettingsActivity*) em miuix-app/ilha/libs/hooks.jar.
+miuix-app/    App de ajustes em miuix (Kotlin/Compose), módulo :ilha compilado dentro do
+              miuix (github.com/compose-miuix-ui/miuix, commit f36cbc9).
+              build.yml.example é o workflow do GitHub Actions usado para isso.
+              Para assinar, crie a sua própria chave (o build.gradle.kts procura teste.jks).
