@@ -943,7 +943,7 @@ public class SettingsActivity extends Activity {
         choice(ap, "Tema do app", new String[]{"Sistema", "Claro", "Escuro"}, "tema", 0, true);
         uiToggle(ap, "Barra de navegação flutuante", "Desligada, a barra fica presa embaixo, de ponta a ponta.", "navbar", true);
         LinearLayout lg = section(page, "Idioma");
-        choice(lg, "Idioma do app", new String[]{"Automático", "Português", "English"}, "lang", 0, true);
+        choice(lg, "Idioma do app", new String[]{"Automático", "Português", "English", "Español"}, "lang", 0, true);
         para(lg, "Os ajustes da música (HyperMusicCover) seguem em inglês.");
         LinearLayout lo = section(page, "Registros");
         para(lo, "Os registros ficam no LSPosed (Registros → Módulos). Copie o resumo abaixo para mandar junto.");

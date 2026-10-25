@@ -30,6 +30,8 @@ final class CurtainClock {
     static Object mainN, secondN;
     static int nTop = -1, nBot = -1;
 
+    static float lastS0 = 1f, curS0 = -1f;
+    static long lastPlace;
     static float e, r;   // quanto o cabeçalho pode subir / quanto subiu (px)
 
     /**
@@ -38,7 +40,12 @@ final class CurtainClock {
      *  "Notificações", o X e a lista sobem juntos até o relógio chegar ao topo.
      */
     static boolean follows() {
-        return "classic_max".equals(model) || "classic_plus".equals(model) || "oversize_b".equals(model) || magazine();
+        return !"magazine_c".equals(model);   // todos sobem ao rolar (HyperOS 4 trouxe modelos novos sem ficha)
+    }
+
+    /** Modelos com ficha própria; os outros (classic, rhombus, bubble, oversize_a, eastern…) encolhem pela metade. */
+    static boolean known() {
+        return "classic_max".equals(model) || "classic_plus".equals(model) || "oversize_b".equals(model) || model.startsWith("magazine");
     }
 
     /** magazine (texto grande alinhado à esquerda): encolhe ao subir, preso pela borda esquerda. */
@@ -49,7 +56,8 @@ final class CurtainClock {
     /** Tamanho do relógio quando chega ao topo (1 = não muda). oversize_b: versão reduzida. */
     static float shrink() {
         if (magazine()) return 0.45f;
-        return "oversize_b".equals(model) ? 0.42f : 1f;
+        if ("oversize_b".equals(model)) return 0.42f;
+        return known() ? 1f : 0.5f;
     }
 
     /** Até onde a medida aceita o fim do relógio (fração da tela). oversize_b tem a data bem embaixo. */
@@ -146,7 +154,26 @@ final class CurtainClock {
             box.getLocationInWindow(bl);
             // sem a transformação da própria caixa (escala e deslocamento mudam a posição medida na tela)
             float baseY = (box.getTop() - deco.getTop()) - (deco.getTranslationY());
-            float clockBottom = visBot + baseY;
+            // com o player de música, relógios altos já começam menores: senão o player e as
+            // notificações ficavam lá embaixo (modelos grandes do HyperOS 4)
+            float s0 = 1f;
+            if (ShadeSheet.playerGap > 0 && ShadeSheet.playerView != null && !"magazine_c".equals(model) && nTid == null && visBot > visTop) {
+                float lim = root.getHeight() * 0.36f, top0 = visTop + baseY;
+                if (top0 + (visBot - visTop) > lim) s0 = Math.max(0.42f, Math.min(1f, (lim - top0) / (visBot - visTop)));
+                if (Math.abs(s0 - lastS0) > 0.01f && logs++ < 14) log("player: relógio começa em " + Math.round(s0 * 100) + "%");
+            }
+            lastS0 = s0;
+            // player entrando/saindo: o relógio cresce/encolhe animado (a lista acompanha quadro a quadro)
+            long tNow = android.os.SystemClock.uptimeMillis();
+            if (curS0 < 0 || tNow - lastPlace > 400) curS0 = s0;   // cortina abrindo: já no tamanho certo
+            else if (Math.abs(s0 - curS0) > 0.002f) {
+                float k = 1f - (float) Math.exp(-Math.min(50, tNow - lastPlace) / 110f);
+                curS0 += (s0 - curS0) * k;
+                deco.postInvalidateOnAnimation();
+            } else curS0 = s0;
+            lastPlace = tNow;
+            s0 = curS0;
+            float clockBottom = visTop + baseY + (visBot - visTop) * s0;
             off = Math.max(0f, clockBottom + 10 * d - bot);
             // modelos que sobem ao rolar: quanto o relógio pode subir até o topo (abaixo da barra de status)
             if (nTid != null && nBot > 0) {
@@ -170,7 +197,7 @@ final class CurtainClock {
                 if (rr >= 0) return off - rr;
             }
             float e2 = 0f;
-            float H = visBot - visTop, S = shrink();
+            float H = visBot - visTop, S = Math.min(shrink(), s0);
             if (follows()) {
                 int sb = 0;
                 int id = root.getResources().getIdentifier("status_bar_height", "dimen", "android");
@@ -181,7 +208,7 @@ final class CurtainClock {
             if (Math.abs(e2 - e) >= 1f) { e = Math.round(e2); ShadeSheet.requestStack(); }
             r = Math.min(e, ShadeSheet.scrollY());
             float p = e > 0 ? r / e : 0f;
-            float sc = 1f - (1f - S) * p;
+            float sc = s0 - (s0 - S) * p;
             box.setPivotX(magazine() && visLeft >= 0 ? visLeft : box.getWidth() / 2f);
             box.setPivotY(visTop);
             box.setScaleX(sc);

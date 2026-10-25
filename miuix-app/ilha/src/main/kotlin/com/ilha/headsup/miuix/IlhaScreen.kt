@@ -981,7 +981,7 @@ private fun LazyListScope.settingsTab(
         )
         OverlayDropdownPreference(
             title = tr("Idioma do app"),
-            items = listOf(tr("Automático"), "Português", "English"),
+            items = listOf(tr("Automático"), "Português", "English", "Español"),
             selectedIndex = store.lang.value,
             onSelectedIndexChange = {
                 store.lang.value = it

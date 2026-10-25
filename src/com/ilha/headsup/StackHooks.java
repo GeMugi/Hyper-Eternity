@@ -125,11 +125,11 @@ final class StackHooks {
             mIsPinned = rowClass.getMethod("isPinned");
             mAwayAnim = Refl.anyMethod(rowClass, "isHeadsUpAnimatingAway$1");
             mExpChanging = rowClass.getMethod("isGroupExpansionChanging");
-            mSetY = viewState.getMethod("setYTranslation", float.class);
-            mSetScaleX = viewState.getMethod("setScaleX", float.class);
-            mSetScaleY = viewState.getMethod("setScaleY", float.class);
-            mSetZ = viewState.getMethod("setZTranslation", float.class);
-            mSetAlpha = viewState.getMethod("setAlpha", float.class);
+            mSetY = VS.find(viewState, "setYTranslation");
+            mSetScaleX = VS.find(viewState, "setScaleX");
+            mSetScaleY = VS.find(viewState, "setScaleY");
+            mSetZ = VS.find(viewState, "setZTranslation");
+            mSetAlpha = VS.find(viewState, "setAlpha");
             fY = Refl.field(viewState, "mYTranslation");
             fAlpha = Refl.field(viewState, "mAlpha");
             fHidden = Refl.field(viewState, "hidden");
@@ -699,7 +699,7 @@ final class StackHooks {
             float want = screenBottom - MEDIA_BOTTOM_DP * d - loc[1] - h;   // topo do cartão, em coordenadas da lista
             float y = fY.getFloat(mvs);
             if (want > y + 0.5f) {
-                mSetY.invoke(mvs, Float.valueOf(want));
+                VS.inv(mSetY, mvs, want);
                 if (mediaLogs++ < 4) ElasticCard.log("player da música embaixo: topo " + (int) (want + loc[1]) + "px na tela (antes " + (int) (y + loc[1]) + "px), altura " + (int) h + "px");
             }
             return true;
@@ -753,6 +753,10 @@ final class StackHooks {
             if (keyguard) {
                 E = host.getHeight() - Prefs.kgOffset * d;
                 fixKeyguard(host);
+            } else if (ShadeSheet.active()) {
+                // cortina: a altura que o HyperOS informa é a da central dele (bem menor), e a cortina
+                // ainda desce os cartões depois. O limite é o fim da tela, descontada essa descida.
+                E = host.getHeight() - Prefs.stOffset * d - ShadeSheet.shift();
             } else {
                 E = fTopPadding.getInt(amb) + ((Integer) mInnerHeight.invoke(amb, Boolean.FALSE)).intValue()
                         - Prefs.stOffset * d;
@@ -859,11 +863,11 @@ final class StackHooks {
                                 float low = sb - MEDIA_BOTTOM_DP * d - loc[1] - h;
                                 if (low > want) want = low;
                             }
-                            if (want > fY.getFloat(vs) + 0.5f) mSetY.invoke(vs, Float.valueOf(want));
+                            if (want > fY.getFloat(vs) + 0.5f) VS.inv(mSetY, vs, want);
                         }
                         continue;
                     }
-                    if (y != fY.getFloat(vs)) mSetY.invoke(vs, Float.valueOf(y));
+                    if (y != fY.getFloat(vs)) VS.inv(mSetY, vs, y);
                     continue;
                 }
                 if (keyguard) {
@@ -876,7 +880,7 @@ final class StackHooks {
                 }
                 boolean first = i == last;
                 if (groups && expandedGroup(v) && !stackedGroup(v)) {
-                    if (shift != 0f || y != fY.getFloat(vs)) mSetY.invoke(vs, Float.valueOf(y));
+                    if (shift != 0f || y != fY.getFloat(vs)) VS.inv(mSetY, vs, y);
                     stackGroup(v, vs, y, h, E, B, m, first, blur, touched);
                     continue;
                 }
@@ -885,12 +889,12 @@ final class StackHooks {
                     touched.add(v);
                     continue;
                 }
-                if (y != fY.getFloat(vs)) mSetY.invoke(vs, Float.valueOf(y));
+                if (y != fY.getFloat(vs)) VS.inv(mSetY, vs, y);
                 if (keyguard && y < fadeTop) {
                     // some suavemente ao passar por baixo da barra de status
                     float len = StackMath.clamp(h * 0.6f, 24f * d, 96f * d);
                     float t = StackMath.clamp((y - fadeTop + len) / len, 0f, 1f);
-                    mSetAlpha.invoke(vs, Float.valueOf(fAlpha.getFloat(vs) * t));
+                    VS.inv(mSetAlpha, vs, fAlpha.getFloat(vs) * t);
                 }
             }
             // no fim do puxar as notificações somem, ficando só o player
@@ -898,7 +902,7 @@ final class StackHooks {
                 float fade = Math.max(0f, 1f - (pullFrac - 0.55f) / 0.4f);
                 for (int i = 0; i < n; i++) {
                     if (states[i] == null || skips[i] || !rows[i]) continue;
-                    mSetAlpha.invoke(states[i], Float.valueOf(fAlpha.getFloat(states[i]) * fade));
+                    VS.inv(mSetAlpha, states[i], fAlpha.getFloat(states[i]) * fade);
                     if (fade <= 0.001f) fHidden.setBoolean(states[i], true);
                 }
             }
@@ -959,8 +963,8 @@ final class StackHooks {
             try {
                 Object vs = mGetViewState.invoke(v);
                 if (vs != null) {
-                    mSetScaleX.invoke(vs, Float.valueOf(1f));
-                    mSetScaleY.invoke(vs, Float.valueOf(1f));
+                    VS.inv(mSetScaleX, vs, 1f);
+                    VS.inv(mSetScaleY, vs, 1f);
                 }
                 st[0]--;
                 st[1] = (v.getScaleX() == 1f && v.getScaleY() == 1f) ? st[1] + 1 : 0;
@@ -991,17 +995,17 @@ final class StackHooks {
             restore(v, vs);
             return null;
         }
-        mSetY.invoke(vs, Float.valueOf(y + base + r[0]));
-        mSetScaleX.invoke(vs, Float.valueOf(r[1]));
-        mSetScaleY.invoke(vs, Float.valueOf(r[1]));
-        mSetZ.invoke(vs, Float.valueOf(z));
+        VS.inv(mSetY, vs, y + base + r[0]);
+        VS.inv(mSetScaleX, vs, r[1]);
+        VS.inv(mSetScaleY, vs, r[1]);
+        VS.inv(mSetZ, vs, z);
         fInShelf.setBoolean(vs, false);
         fClipTop.setInt(vs, 0);
         fHidden.setBoolean(vs, r[3] > 3f);
         float a = fAlpha.getFloat(vs);
         if (onKeyguard && a < 1f && r[3] <= 2f) a = 1f;   // o HOS3 apaga as que passam do limite dele
         if (!blur && r[3] > 2f) a = a * StackMath.clamp(3f - r[3], 0f, 1f);
-        mSetAlpha.invoke(vs, Float.valueOf(a));
+        VS.inv(mSetAlpha, vs, a);
         Info inf = active.get(v);
         if (inf == null) {
             inf = new Info();
@@ -1091,8 +1095,8 @@ final class StackHooks {
         if (active.remove(v) == null) return;
         settling.put(v, new int[]{600, 0});
         try {
-            mSetScaleX.invoke(vs, Float.valueOf(1f));
-            mSetScaleY.invoke(vs, Float.valueOf(1f));
+            VS.inv(mSetScaleX, vs, 1f);
+            VS.inv(mSetScaleY, vs, 1f);
             mSetClipBottom.invoke(v, Integer.valueOf(0));
             v.invalidate();
         } catch (Throwable ignored) {

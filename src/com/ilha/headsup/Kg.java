@@ -347,6 +347,14 @@ final class Kg {
             if (g.getChildCount() > 0) return;
         }
         if (!(v instanceof ImageView) || v.getClass().getName().contains("Emergency")) return;
+        // só os botões de verdade (no HyperOS 4 os atalhos são desenhados em Compose e as outras
+        // imagens dos cantos, como setas e dicas, entravam no lugar)
+        String idn = "";
+        try {
+            if (v.getId() != View.NO_ID) idn = v.getResources().getResourceEntryName(v.getId()).toLowerCase();
+        } catch (Throwable ignored) {
+        }
+        if (!(idn.contains("start") || idn.contains("end") || idn.contains("button") || idn.contains("affordance") || idn.contains("shortcut") || idn.contains("camera") || idn.contains("flash"))) return;
         int vw = v.getWidth(), vh = v.getHeight();
         if (vw < 20 * d || vh < 20 * d || vw > 110 * d || vh > 110 * d) return;
         android.graphics.Rect r = rectOf(v);
@@ -373,6 +381,56 @@ final class Kg {
 
     static Drawable icon(View root, boolean isTorch) {
         scan(root);
-        return isTorch ? torch : camera;
+        Drawable d = isTorch ? torch : camera;
+        if (d != null) return d;
+        // HyperOS 4: os ícones dos atalhos do bloqueio (os mesmos que ele desenha em Compose)
+        int id = isTorch ? (SheetDeco.torch && affTorchOn != 0 ? affTorchOn : affTorchOff) : affCamera;
+        if (id == 0) return null;
+        Drawable c = affCache.get(id);
+        if (c == null) {
+            try {
+                c = root.getContext().getDrawable(id).mutate();
+                affCache.put(id, c);
+            } catch (Throwable ignored) {
+            }
+        }
+        return c;
+    }
+
+    static int affTorchOn, affTorchOff, affCamera;
+    static final java.util.HashMap<Integer, Drawable> affCache = new java.util.HashMap<>();
+    static int affLogs;
+
+    /** HyperOS 4: guarda os ícones que os atalhos do bloqueio usam (lanterna acesa/apagada e câmera). */
+    static void hookAffordances(ClassLoader cl) {
+        try {
+            Class vis = Class.forName("com.android.systemui.keyguard.data.quickaffordance.KeyguardQuickAffordanceConfig$LockScreenState$Visible", false, cl);
+            for (java.lang.reflect.Constructor k : vis.getDeclaredConstructors()) {
+                com.ilha.headsup.xp.XposedBridge.hookMethod(k, new com.ilha.headsup.xp.XC_MethodHook() {
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            Object icon = p.args.length > 0 ? p.args[0] : null;
+                            Object st = p.args.length > 1 ? p.args[1] : null;
+                            Object rid = Refl.get(icon, "resId");
+                            if (!(rid instanceof Integer)) return;
+                            int id = (Integer) rid;
+                            View pv = ShadeSheet.panel == null ? null : ShadeSheet.panel.get();
+                            if (pv == null) return;
+                            String n = pv.getResources().getResourceEntryName(id).toLowerCase();
+                            boolean active = st != null && st.getClass().getSimpleName().equals("Active");
+                            if (n.contains("flash") || n.contains("torch")) {
+                                if (active) affTorchOn = id; else affTorchOff = id;
+                            } else if (n.contains("camera") && !n.contains("video")) {
+                                affCamera = id;
+                            } else return;
+                            if (affLogs++ < 4) ElasticCard.log("cortina: ícone do atalho do bloqueio " + n + (active ? " (aceso)" : ""));
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                });
+            }
+        } catch (Throwable t) {
+            // HyperOS 3: sem atalhos em Compose, os botões são copiados da tela
+        }
     }
 }

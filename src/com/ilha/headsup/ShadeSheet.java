@@ -85,8 +85,8 @@ final class ShadeSheet {
                     }
                 });
             }
+            Class npvc = Class.forName("com.android.systemui.shade.NotificationPanelViewController", false, cl);
             try {
-                Class npvc = Class.forName("com.android.systemui.shade.NotificationPanelViewController", false, cl);
                 XposedBridge.hookMethod(npvc.getDeclaredMethod("startInputFocusTransfer"), new XC_MethodHook() {
                     protected void beforeHookedMethod(MethodHookParam p) {
                         try {
@@ -108,6 +108,11 @@ final class ShadeSheet {
                         }
                     }
                 });
+            } catch (Throwable t) {
+                // HyperOS 4: o puxar da tela inicial e da barra de status chega como "toque externo"
+                hookExternal(cl);
+            }
+            try {
                 XC_MethodHook skip = new XC_MethodHook() {
                     protected void beforeHookedMethod(MethodHookParam p) {
                         // o launcher termina/cancela o gesto dele; quem decide é o nosso dedo
@@ -151,12 +156,15 @@ final class ShadeSheet {
                         }
                     }
                 });
-                XposedBridge.hookMethod(npvc.getDeclaredMethod("finishInputFocusTransfer", float.class), skip);
-                XposedBridge.hookMethod(npvc.getDeclaredMethod("cancelInputFocusTransfer"), skip);
+                for (java.lang.reflect.Method m : npvc.getDeclaredMethods()) {
+                    String n = m.getName();
+                    if ("finishInputFocusTransfer".equals(n) || "cancelInputFocusTransfer".equals(n)) XposedBridge.hookMethod(m, skip);
+                }
             } catch (Throwable t) {
-                ElasticCard.log("cortina: tela inicial indisponível: " + t);
+                ElasticCard.log("cortina: fechar pela lista indisponível: " + t);
             }
             final Class pc = Class.forName("com.android.systemui.shade.NotificationPanelExpandController", false, cl);
+            try {
             for (java.lang.reflect.Constructor k : pc.getDeclaredConstructors()) {
                 XposedBridge.hookMethod(k, new XC_MethodHook() {
                     protected void afterHookedMethod(MethodHookParam p) {
@@ -164,7 +172,11 @@ final class ShadeSheet {
                     }
                 });
             }
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: passo 1 (controle da abertura): " + t);
+            }
             // progresso da abertura (o mesmo que anima o relógio da central)
+            try {
             Class em = Class.forName("com.android.systemui.shade.NotificationPanelExpandController$2$1$1", false, cl);
             final java.lang.reflect.Field fid = em.getDeclaredField("$r8$classId");
             fid.setAccessible(true);
@@ -178,7 +190,11 @@ final class ShadeSheet {
                     }
                 }
             });
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: passo 2 (progresso da abertura): " + t);
+            }
             // conteúdo: os cartões não fazem a entrada do HyperOS, já estão prontos dentro da cortina
+            try {
             Class ac = Class.forName("com.android.systemui.shade.MiuiNotificationPanelAnimControllerImpl", false, cl);
             for (java.lang.reflect.Method m : ac.getDeclaredMethods()) {
                 if (m.getName().equals("startPanelExpandAnimation$default")) {
@@ -198,12 +214,45 @@ final class ShadeSheet {
                     });
                 }
             }
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: passo 3 (entrada dos cartões): " + t);
+            }
+            try {
             XposedBridge.hookMethod(pc.getDeclaredMethod("notifyAppearanceChanged", boolean.class, boolean.class), new XC_MethodHook() {
                 protected void beforeHookedMethod(MethodHookParam p) {
                     if (!active() || !Boolean.TRUE.equals(p.args[0])) return;
                     p.args[1] = Boolean.FALSE;
                 }
             });
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: passo 4 (aparência): " + t);
+            }
+            // HyperOS 4: fechar (gesto de início, voltar, tocar fora) chama hide(true), que fazia a animação
+            // da central padrão por cima da cortina. Com a cortina aberta, quem fecha é ela (sobe).
+            try {
+                XposedBridge.hookMethod(pc.getDeclaredMethod("hide", boolean.class), new XC_MethodHook() {
+                    protected void beforeHookedMethod(MethodHookParam p) {
+                        try {
+                            if (!Boolean.TRUE.equals(p.args[0]) || !active() || closingWait) return;
+                            View v = panel == null ? null : panel.get();
+                            if (v == null) return;
+                            p.setResult(null);
+                            if (android.os.SystemClock.uptimeMillis() < noCloseUntil) return;   // depois do limpar tudo: fica aberta
+                            if (!animating && !dragging) settle(v, false, -2500f);
+                            if (hideLogs++ < 3) ElasticCard.log("cortina: fechar do HyperOS trocado pela subida da cortina");
+                        } catch (Throwable t) {
+                            ElasticCard.log("cortina hide: " + t);
+                        }
+                    }
+                });
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: passo 4b (fechar animado): " + t);
+            }
+            try {
+                hookSwitch(cl);
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: passo 4c (troca lateral): " + t);
+            }
             String suf = "$packages__apps__MiuiSystemUI__packages__SystemUI__android_common__MiuiSystemUI_core";
             try {
                 Class st = Class.forName("com.android.systemui.shade.NotificationPanelStretchAnimator", false, cl);
@@ -227,11 +276,32 @@ final class ShadeSheet {
             } catch (Throwable t) {
                 ElasticCard.log("cortina: desfoque indisponível: " + t);
             }
-            Kg.hookBlur(cl);
-            hookGradient();
-            CurtainClock.install(cl);
-            hookStackShift(cl);
-            hookSources(cl);
+            Kg.hookAffordances(cl);
+            try {
+                Kg.hookBlur(cl);
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: passo 5 (material do relógio): " + t);
+            }
+            try {
+                hookGradient();
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: passo 6 (degradê): " + t);
+            }
+            try {
+                CurtainClock.install(cl);
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: passo 7 (relógio): " + t);
+            }
+            try {
+                hookStackShift(cl);
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: passo 8 (lista): " + t);
+            }
+            try {
+                hookSources(cl);
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: passo 9 (toques): " + t);
+            }
             // teste: o vidro do HyperOS 4 (setMiGlass / setMiViewMaterialType) existe neste sistema?
             try {
                 StringBuilder gl = new StringBuilder();
@@ -277,6 +347,7 @@ final class ShadeSheet {
         final View v = panel == null ? null : panel.get();
         if (v == null) return;
         lastF = f;
+        if (switchingNow) return;   // troca lateral: quem decide é o fim da troca
         if (on && f <= 0f && !dragging && !animating) {
             if (closingWait) finishClose(v);
             else off(v);
@@ -414,7 +485,7 @@ final class ShadeSheet {
                             float y = Refl.field(vs.getClass(), "mYTranslation").getFloat(vs);
                             // com o player na lista, os cartões depois dele descem a faixa de "Notificações"
                             int gapNow = (playerGap > 0 && !c.getClass().getSimpleName().contains("MediaHeader")) ? playerGap : 0;
-                            vs.getClass().getMethod("setYTranslation", float.class).invoke(vs, y + e + gapNow);
+                            GroupStack.call(vs, "setYTranslation", y + e + gapNow);
                             // o corte de cima foi calculado antes de descer: desconta o que desceu
                             java.lang.reflect.Field fc = Refl.field(vs.getClass(), "clipTopAmount");
                             if (fc != null) fc.setInt(vs, Math.max(0, fc.getInt(vs) - e));
@@ -440,9 +511,35 @@ final class ShadeSheet {
                     if (on && e > 0) p.setResult(Integer.valueOf(((Integer) p.getResult()).intValue() + e));
                 }
             });
+            // sem o elástico do fim da lista na cortina: ao chegar no topo ou no fim, a lista (com o
+            // player e o título) dava um pulo e voltava
+            XC_MethodHook noOver = new XC_MethodHook() {
+                protected void beforeHookedMethod(MethodHookParam p) {
+                    if (active() && p.args.length > 0 && p.args[0] instanceof Float && ((Float) p.args[0]).floatValue() != 0f) {
+                        p.args[0] = Float.valueOf(0f);
+                        if (overLogs++ < 2) ElasticCard.log("cortina: elástico do fim da lista desligado");
+                    }
+                }
+            };
+            int nOver = 0;
+            for (java.lang.reflect.Method m : nc.getDeclaredMethods()) {
+                String n = m.getName();
+                if (("setOverScrollAmount".equals(n) || "setOverScrolledPixels".equals(n)) && m.getParameterTypes().length > 0 && m.getParameterTypes()[0] == float.class) {
+                    XposedBridge.hookMethod(m, noOver);
+                    nOver++;
+                }
+            }
+            ElasticCard.log("cortina: elástico do fim da lista: " + nOver + " ganchos");
         } catch (Throwable t) {
             ElasticCard.log("cortina: relógio que sobe indisponível: " + t);
         }
+    }
+    static int overLogs, hideLogs, swLogs;
+
+    /** Quanto a cortina desce os cartões depois do algoritmo do HyperOS (relógio + lista + título). */
+    static int shift() {
+        int e = Math.round(CurtainClock.e) + listExtra;
+        return e > 0 ? e + playerGap : 0;
     }
     static boolean sbTake;
     static float titleExtra;
@@ -463,22 +560,22 @@ final class ShadeSheet {
         float[] r = (h <= 107f * d || grp) ? m.normal(first, h, c, T, piv, 0f) : m.big(h, c, 72f * d, piv, T, first, 0f);
         if (r == null) {
             if (topTouched.remove(v) != null) {
-                StackHooks.mSetScaleX.invoke(vs, Float.valueOf(1f));
-                StackHooks.mSetScaleY.invoke(vs, Float.valueOf(1f));
+                VS.inv(StackHooks.mSetScaleX, vs, 1f);
+                VS.inv(StackHooks.mSetScaleY, vs, 1f);
             }
             return false;
         }
         topTouched.put(v, Boolean.TRUE);
-        StackHooks.mSetY.invoke(vs, Float.valueOf(y + base - r[0]));
-        StackHooks.mSetScaleX.invoke(vs, Float.valueOf(r[1]));
-        StackHooks.mSetScaleY.invoke(vs, Float.valueOf(r[1]));
-        if (StackHooks.mSetZ != null) StackHooks.mSetZ.invoke(vs, Float.valueOf(z));   // os de cima ficam atrás
+        VS.inv(StackHooks.mSetY, vs, y + base - r[0]);
+        VS.inv(StackHooks.mSetScaleX, vs, r[1]);
+        VS.inv(StackHooks.mSetScaleY, vs, r[1]);
+        if (StackHooks.mSetZ != null) VS.inv(StackHooks.mSetZ, vs, z);   // os de cima ficam atrás
         StackHooks.fInShelf.setBoolean(vs, false);
         StackHooks.fClipTop.setInt(vs, Math.max(0, (int) r[2]));
         StackHooks.fHidden.setBoolean(vs, r[3] > 3f);
         float a = StackHooks.fAlpha.getFloat(vs);
         if (r[3] > 2f) a = a * StackMath.clamp(3f - r[3], 0f, 1f);
-        StackHooks.mSetAlpha.invoke(vs, Float.valueOf(a));
+        VS.inv(StackHooks.mSetAlpha, vs, a);
         return true;
     }
 
@@ -507,13 +604,13 @@ final class ShadeSheet {
         // fixo: depois que o relógio terminou de subir (ou desde o começo, se ele não sobe)
         float pin = py + sc - e;
         float pyShown = Math.max(py, pin);
-        pvs.getClass().getMethod("setYTranslation", float.class).invoke(pvs, pyShown);
+        GroupStack.call(pvs, "setYTranslation", pyShown);
         java.lang.reflect.Field fcp = Refl.field(pvs.getClass(), "clipTopAmount");
         if (fcp != null) fcp.setInt(pvs, 0);
         // fixo na tela: o sistema o daria por "rolado para fora" e esconderia
         java.lang.reflect.Field fhp = Refl.field(pvs.getClass(), "hidden");
         if (fhp != null) fhp.setBoolean(pvs, false);
-        pvs.getClass().getMethod("setAlpha", float.class).invoke(pvs, 1f);
+        GroupStack.call(pvs, "setAlpha", 1f);
         float line = pyShown + ph + gap;   // começo da área dos cartões (abaixo do título)
         playerView = (View) player;
         if (playerGap != Math.round(gap)) { playerGap = Math.round(gap); requestStack(); }
@@ -556,7 +653,7 @@ final class ShadeSheet {
                         if (hs == null) continue;
                         try {
                             float cur = Refl.field(hs.getClass(), "alpha").getFloat(hs);
-                            hs.getClass().getMethod("setAlpha", float.class).invoke(hs, Math.min(cur, ga));
+                            GroupStack.call(hs, "setAlpha", Math.min(cur, ga));
                         } catch (Throwable ignored) {
                         }
                     }
@@ -567,7 +664,7 @@ final class ShadeSheet {
                         if (hs != null) {
                             try {
                                 float cur = Refl.field(hs.getClass(), "alpha").getFloat(hs);
-                                hs.getClass().getMethod("setAlpha", float.class).invoke(hs, Math.min(cur, ga));
+                                GroupStack.call(hs, "setAlpha", Math.min(cur, ga));
                             } catch (Throwable ignored) {
                             }
                         }
@@ -604,6 +701,49 @@ final class ShadeSheet {
     }
 
     /** Sem monitor global: o puxar vem da barra de status (lado das notificações) e do launcher. */
+    /**
+     * HyperOS 4: não há mais startInputFocusTransfer. O puxar da tela inicial (e da barra de status)
+     * chega ao NotificationPanelViewControllerInjector.handleExternalTouch, já depois de o HyperOS
+     * decidir que é a central de notificações (e não o centro de controle). A cortina assume aqui.
+     */
+    static void hookExternal(ClassLoader cl) {
+        try {
+            Class inj = Class.forName("com.android.systemui.shade.NotificationPanelViewControllerInjector", false, cl);
+            XposedBridge.hookMethod(inj.getDeclaredMethod("handleExternalTouch", android.view.MotionEvent.class), new XC_MethodHook() {
+                protected void beforeHookedMethod(MethodHookParam p) {
+                    try {
+                        android.view.MotionEvent e = (android.view.MotionEvent) p.args[0];
+                        View v = panel == null ? null : panel.get();
+                        int a = e.getActionMasked();
+                        if (a == android.view.MotionEvent.ACTION_DOWN) {
+                            if (v == null || !Prefs.shadeSheet || locked(v) || on || animating) return;
+                            transfer = true;
+                            candidate = true;
+                            closing = false;
+                            if (vt == null) vt = android.view.VelocityTracker.obtain();
+                            vt.clear();
+                            transferY0 = -1f;
+                            begin(v);
+                            dragging = true;
+                            if (extLogs++ < 4) ElasticCard.log("cortina: puxada por toque externo (HyperOS 4)");
+                        }
+                        if (!transfer) return;
+                        feed(e);
+                        lastOurTouch = android.os.SystemClock.uptimeMillis();
+                        p.setResult(Boolean.TRUE);
+                    } catch (Throwable t) {
+                        ElasticCard.log("cortina toque externo: " + t);
+                    }
+                }
+            });
+            ElasticCard.log("cortina: toque externo do HyperOS 4 assumido");
+        } catch (Throwable t) {
+            ElasticCard.log("cortina: tela inicial indisponível: " + t);
+        }
+    }
+
+    static int extLogs;
+
     static void hookSources(ClassLoader cl) {
         try {
             final Class sb = Class.forName("com.android.systemui.statusbar.phone.PhoneStatusBarView", false, cl);
@@ -778,6 +918,7 @@ final class ShadeSheet {
         on = true;
         v.setTranslationY(-h);
         if (!Prefs.sheetBlur) background(v);
+        follow(v, 0f, 1f);
         deco(v, true);
         hookPreDraw(v);
         round(v);
@@ -838,6 +979,116 @@ final class ShadeSheet {
     }
 
     static boolean closingWait;
+
+    // ------------------------------------------------------------------ troca lateral (centro de controle <-> cortina)
+
+    static Object swCtl;
+    static boolean switchingNow;
+    static float swX;
+    static int swLogs2;
+
+    static boolean swBool(String m) {
+        try { return Boolean.TRUE.equals(swCtl.getClass().getMethod(m).invoke(swCtl)); } catch (Throwable t) { return false; }
+    }
+
+    static float swProgress() {
+        try { return ((Number) swCtl.getClass().getMethod("getSwitchProgress").invoke(swCtl)).floatValue(); } catch (Throwable t) { return 1f; }
+    }
+
+    /**
+     * HyperOS 4: o deslizar para o lado entre o centro de controle e as notificações. Com a cortina, quem
+     * entra/sai deslizando é ela (relógio, título, botões, fundo), acompanhando o painel do HyperOS.
+     */
+    static void hookSwitch(ClassLoader cl) throws Throwable {
+        Class sw = Class.forName("com.miui.systemui.shade.ShadeSwitchControllerImpl", false, cl);
+        XposedBridge.hookMethod(sw.getDeclaredMethod("isSwitchable"), new XC_MethodHook() {
+            protected void beforeHookedMethod(MethodHookParam p) {
+                swCtl = p.thisObject;
+                View v = panel == null ? null : panel.get();
+                if (v == null || !Prefs.shadeSheet || locked(v)) return;
+                // no meio do nosso gesto (puxar/fechar a cortina) não troca
+                if (dragging || animating || transfer || closingWait) p.setResult(Boolean.FALSE);
+            }
+        });
+        final java.lang.reflect.Field fSw = Refl.field(sw, "switching");
+        XposedBridge.hookMethod(sw.getDeclaredMethod("setSwitching", boolean.class), new XC_MethodHook() {
+            protected void beforeHookedMethod(MethodHookParam p) {
+                try {
+                    swCtl = p.thisObject;
+                    boolean z = Boolean.TRUE.equals(p.args[0]);
+                    if (fSw != null && fSw.getBoolean(p.thisObject) == z) return;
+                    View v = panel == null ? null : panel.get();
+                    if (!z || v == null || !Prefs.shadeSheet || locked(v)) return;
+                    switchingNow = true;
+                    boolean cc = swBool("getControlCenterExpanded"), nt = swBool("getNotificationExpanded");
+                    if (!on && cc && !nt) {
+                        enterInPlace(v);
+                        if (swLogs2++ < 4) ElasticCard.log("cortina: entrando de lado pelo centro de controle");
+                    } else if (on && swLogs2++ < 4) ElasticCard.log("cortina: saindo de lado para o centro de controle");
+                } catch (Throwable t) {
+                    ElasticCard.log("cortina troca: " + t);
+                }
+            }
+
+            protected void afterHookedMethod(MethodHookParam p) {
+                try {
+                    if (Boolean.TRUE.equals(p.args[0]) || !switchingNow) return;
+                    switchingNow = false;
+                    final View v = panel == null ? null : panel.get();
+                    if (v == null || !on) return;
+                    follow(v, 0f, 1f);
+                    if (!swBool("getNotificationExpanded")) off(v);   // terminou no centro de controle
+                } catch (Throwable t) {
+                    ElasticCard.log("cortina troca fim: " + t);
+                }
+            }
+        });
+        Class nw = Class.forName("com.miui.systemui.shade.ShadeSwitchControllerImpl$notification$1", false, cl);
+        final java.lang.reflect.Field fId = Refl.field(nw, "$r8$classId");
+        final java.lang.reflect.Field fShade = Refl.field(nw, "shade");
+        XposedBridge.hookMethod(nw.getDeclaredMethod("updateTransX"), new XC_MethodHook() {
+            protected void afterHookedMethod(MethodHookParam p) {
+                try {
+                    if (!on || !switchingNow || fId.getInt(p.thisObject) != 0) return;
+                    Object sh = fShade.get(p.thisObject);
+                    View c = (View) sh.getClass().getMethod("getContainer").invoke(sh);
+                    View v = panel == null ? null : panel.get();
+                    if (v != null && c != null) follow(v, c.getTranslationX(), swProgress());
+                } catch (Throwable t) {
+                    if (swLogs2++ < 6) ElasticCard.log("cortina troca: " + t);
+                }
+            }
+        });
+        ElasticCard.log("cortina: troca lateral com o centro de controle acompanhada");
+    }
+
+    /** A cortina aparece no lugar (sem descer): a troca lateral do HyperOS já abriu a central. */
+    static void enterInPlace(View v) {
+        closingWait = false;
+        if (anim != null) anim.cancel();
+        if (v.getAlpha() != 1f) v.setAlpha(1f);
+        on = true;
+        v.setTranslationY(0f);
+        if (!Prefs.sheetBlur) background(v);
+        deco(v, true);
+        hookPreDraw(v);
+        round(v);
+        if (!Prefs.sheetBlur) hideMiui(v);
+        layoutList(v, true);
+        follow(v, -v.getWidth(), 0f);
+    }
+
+    /** Desloca para o lado tudo o que a cortina desenha; p = 1 na cortina, 0 no centro de controle. */
+    static void follow(View v, float tx, float p) {
+        swX = tx;
+        p = Math.max(0f, Math.min(1f, p));
+        for (View x : new View[]{decoV, CurtainClock.box, CurtainClock.boxN, band, Kg.box, Kg.hbox}) {
+            if (x != null && x.getParent() == v && x.getTranslationX() != tx) x.setTranslationX(tx);
+        }
+        if (bgDrawable != null && v.getBackground() == bgDrawable) bgDrawable.setAlpha(Math.round(255 * p));
+        if (!Prefs.sheetBlur) for (View x : hidden) x.setAlpha(switchingNow ? 1f - p : 0f);
+        if (decoV != null) decoV.invalidate();
+    }
 
     static void finishClose(final View v) {
         closingWait = false;
@@ -989,9 +1240,9 @@ final class ShadeSheet {
                 }
             }
             int dt = Math.round(deco.getTop() + deco.getTranslationY());
-            blurL.setTranslationX(lx - r);
+            blurL.setTranslationX(lx - r + deco.getTranslationX());
             blurL.setTranslationY(dt + cy - r);
-            blurR.setTranslationX(rx - r);
+            blurR.setTranslationX(rx - r + deco.getTranslationX());
             blurR.setTranslationY(dt + cy - r);
         } catch (Throwable t) {
             blurBroken = true;
@@ -1133,6 +1384,8 @@ final class ShadeSheet {
 
     static void off(View v) {
         on = false;
+        switchingNow = false;
+        follow(v, 0f, 1f);
         layoutList(v, false);
         for (View x : hidden) x.setAlpha(1f);
         hidden.clear();
@@ -1173,7 +1426,7 @@ final class ShadeSheet {
                         }
                         if (!enabled(v)) off(v);
                         else {
-                            if (!Prefs.sheetBlur) for (View x : hidden) if (x.getAlpha() != 0f) x.setAlpha(0f);
+                            if (!Prefs.sheetBlur && !switchingNow) for (View x : hidden) if (x.getAlpha() != 0f) x.setAlpha(0f);
                             if (hdr != null && hdr.getAlpha() != 0f) hdr.setAlpha(0f);
                             if (dismissView == null) dismissView = findId(v, "notification_dismiss_view", 0);
                             if (dismissView != null) {
@@ -1303,9 +1556,9 @@ final class ShadeSheet {
                 }
             }
             float top = deco.getTop();
-            hTitle.setTranslationX(20 * d);
+            hTitle.setTranslationX(20 * d + deco.getTranslationX());
             hTitle.setTranslationY(top + gy - hTitle.getHeight() / 2f);
-            hClear.setTranslationX(deco.getWidth() - 36 * d - sz / 2f);
+            hClear.setTranslationX(deco.getWidth() - 36 * d - sz / 2f + deco.getTranslationX());
             hClear.setTranslationY(top + gy - sz / 2f);
             hTitle.setAlpha(alpha);
             hClear.setAlpha(alpha);
@@ -1407,21 +1660,27 @@ final class ShadeSheet {
                     final android.graphics.Paint pt = new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
                     final android.graphics.Matrix m = new android.graphics.Matrix();
 
+                    int al = 255;
+
                     public void draw(android.graphics.Canvas c) {
+                        if (al <= 0) return;
+                        pt.setAlpha(al);
                         android.graphics.Rect b = getBounds();
                         float sc = Math.max(b.width() / (float) fb.getWidth(), b.height() / (float) fb.getHeight());
                         m.setScale(sc, sc);
                         m.postTranslate(b.left + (b.width() - fb.getWidth() * sc) / 2f, b.top + (b.height() - fb.getHeight() * sc) / 2f);
                         c.drawBitmap(fb, m, pt);
-                        c.drawColor(dim);
+                        c.drawColor(((((dim >>> 24) * al) / 255) << 24));
                     }
 
-                    public void setAlpha(int a) {}
+                    public void setAlpha(int a) {
+                        if (a != al) { al = a; invalidateSelf(); }
+                    }
 
                     public void setColorFilter(android.graphics.ColorFilter cf) {}
 
                     public int getOpacity() {
-                        return android.graphics.PixelFormat.OPAQUE;
+                        return al >= 255 ? android.graphics.PixelFormat.OPAQUE : android.graphics.PixelFormat.TRANSLUCENT;
                     }
                 };
             }
