@@ -34,8 +34,8 @@ android {
         applicationId = "com.ilha.headsup"
         minSdk = 33
         targetSdk = BuildConfig.TARGET_SDK
-        versionCode = 864
-        versionName = "7.9.55"
+        versionCode = 865
+        versionName = "7.9.56"
     }
     signingConfigs {
         register("teste") {

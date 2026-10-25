@@ -166,14 +166,14 @@ class Store(
     val otherInstalled = mutableStateOf(false)
 
     // Heads-up
-    val huEnabled = b("hu_enabled", true)
+    val huEnabled = b("hu_enabled", false)
     val huStyle = i("hu_style", 0)
     val huSpeed = i("hu_speed", 100)
     val huBounce = i("hu_bounce", 100)
     val huIosSpeed = i("hu_ios_speed", 100)
     val huIosBounce = i("hu_ios_bounce", 100)
-    val huNoActions = b("hu_no_actions", true)
-    val huSeparate = b("hu_separate", true)
+    val huNoActions = b("hu_no_actions", false)
+    val huSeparate = b("hu_separate", false)
 
     // Notificações
     val modalFull = b("modal_full", false)
@@ -189,9 +189,9 @@ class Store(
     val notifVib = b("notif_vib", false)
 
     // Gaveta e pilhas
-    val stEnabled = b("st_enabled", true)
+    val stEnabled = b("st_enabled", false)
     val stOffset = i("st_offset", 72)
-    val stGroups = b("st_groups", true)
+    val stGroups = b("st_groups", false)
     val groupStack = b("group_stack", false)
     val gsSpeed = i("gs_speed", 100)
     val gsBounce = i("gs_bounce", 100)
@@ -199,14 +199,14 @@ class Store(
     val gsShadow = i("gs_shadow", 40)
 
     // Tela de bloqueio
-    val kgHmc = b("kg_hmc", true)
-    val kgKeep = b("kg_keep", true)
-    val kgEnabled = b("kg_enabled", true)
-    val kgScroll = b("kg_scroll", true)
-    val kgClockFixed = b("kg_clock_fixed", true)
-    val kgClock = b("kg_clock", true)
-    val kgBlur = b("kg_blur", true)
-    val kgIos = b("kg_ios", true)
+    val kgHmc = b("kg_hmc", false)
+    val kgKeep = b("kg_keep", false)
+    val kgEnabled = b("kg_enabled", false)
+    val kgScroll = b("kg_scroll", false)
+    val kgClockFixed = b("kg_clock_fixed", false)
+    val kgClock = b("kg_clock", false)
+    val kgBlur = b("kg_blur", false)
+    val kgIos = b("kg_ios", false)
     val kgStart = i("kg_start", 58)
     val kgOffset = i("kg_offset", 150)
     val kgHide = b("kg_hide", false)
@@ -283,7 +283,7 @@ class Store(
         moduleVersion.value = res.getString("__version") ?: ""
         musicInstalled.value = res.getBoolean("__music", false)
         all.forEach { it.load(res) }
-        enabledCount.intValue = all.count { it is BoolPref && it.value }
+        enabledCount.intValue = all.count { it is BoolPref && it.value && !it.def }
     }
 
     fun resetAll() {
