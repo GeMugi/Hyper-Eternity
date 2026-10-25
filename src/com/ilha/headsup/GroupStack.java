@@ -94,6 +94,23 @@ final class GroupStack {
                         if (summary == null || !attached(summary)) return;
                         String key = key(summary);
                         boolean open = Boolean.TRUE.equals(p.args[1]);
+                        if (!open && fanned.contains(key)) {
+                            // HyperOS 4: o toque no 1º cartão do grupo aberto chegava como "recolher"
+                            // (área do cabeçalho do grupo). Se o dedo estava no cartão, abre o cartão.
+                            final View f = firstChildOf(rowOf(summary));
+                            if (f != null && tapOn(f)) {
+                                downAt = 0;
+                                p.setResult(null);
+                                f.post(new Runnable() {
+                                    public void run() {
+                                        openingFirst = true;
+                                        try { f.performClick(); } finally { openingFirst = false; }
+                                    }
+                                });
+                                if (firstLogs++ < 4) ElasticCard.log("grupos em pilha: recolher trocado por abrir o 1º cartão (toque nele)");
+                                return;
+                            }
+                        }
                         boolean changed = open ? fanned.add(key) : fanned.remove(key);
                         p.args[0] = summary;
                         p.args[1] = Boolean.TRUE;
@@ -121,6 +138,22 @@ final class GroupStack {
             ok++;
         } catch (Throwable t) {
             ElasticCard.log("grupos em pilha: expansão de grupo não encontrada " + t);
+        }
+        try {
+            final Class nssl = Class.forName(P + "stack.NotificationStackScrollLayout", false, cl);
+            XposedBridge.hookMethod(nssl.getMethod("dispatchTouchEvent", android.view.MotionEvent.class), new XC_MethodHook() {
+                protected void beforeHookedMethod(MethodHookParam p) {
+                    if (!nssl.isInstance(p.thisObject)) return;
+                    android.view.MotionEvent e = (android.view.MotionEvent) p.args[0];
+                    if (e.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                        downX = e.getRawX();
+                        downY = e.getRawY();
+                        downAt = android.os.SystemClock.uptimeMillis();
+                    }
+                }
+            });
+        } catch (Throwable t) {
+            ElasticCard.log("grupos em pilha: toques da lista não monitorados " + t);
         }
         try {
             Class clicker = Class.forName(P + "NotificationClicker", false, cl);
@@ -489,12 +522,71 @@ final class GroupStack {
         }
     }
     static long lastTapAct;
+    static int firstLogs;
+
+    static float downX, downY;
+    static long downAt;
+    static boolean openingFirst;
+
+    static View firstChildOf(Object row) {
+        try {
+            Object c = row == null ? null : Refl.get(row, "mChildrenContainer");
+            Object kids = c == null ? null : Refl.get(c, "mAttachedChildren");
+            if (kids instanceof List && !((List) kids).isEmpty() && ((List) kids).get(0) instanceof View) return (View) ((List) kids).get(0);
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    /** O último toque (até 0,8 s atrás) caiu dentro deste cartão, na tela? */
+    static boolean tapOn(View v) {
+        if (android.os.SystemClock.uptimeMillis() - downAt > 800 || !v.isShown()) return false;
+        int[] l = new int[2];
+        v.getLocationOnScreen(l);
+        int h = v.getHeight();
+        try { Object ah = Refl.call(v, "getActualHeight"); if (ah instanceof Integer && ((Integer) ah).intValue() > 0) h = ((Integer) ah).intValue(); } catch (Throwable ignored) {}
+        return downX >= l[0] && downX <= l[0] + v.getWidth() && downY >= l[1] && downY <= l[1] + h;
+    }
+
+    /** Cabeçalho "App (n) ⌄" do HyperOS 4 visível no grupo (quem recolhe é a seta dele). */
+    static boolean headerShown(Object row) {
+        try {
+            Object c = Refl.get(row, "mChildrenContainer");
+            Object inj = c == null ? null : Refl.get(c, "mInjector");
+            Object gh = inj == null ? null : Refl.get(inj, "mMiuiGroupHeader");
+            if (gh instanceof View && visibleHeader((View) gh)) return true;
+            return row instanceof View && findHeader((View) row, 0);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    static boolean visibleHeader(View h) {
+        return h.isShown() && h.getAlpha() > 0.05f && h.getHeight() > 0;
+    }
+
+    static boolean findHeader(View v, int depth) {
+        if (v.getClass().getSimpleName().equals("NotificationGroupHeader") && visibleHeader(v)) return true;
+        if (!(v instanceof android.view.ViewGroup) || depth > 4) return false;
+        android.view.ViewGroup g = (android.view.ViewGroup) v;
+        for (int i = 0; i < g.getChildCount(); i++) {
+            View ch = g.getChildAt(i);
+            if (ch.getClass().getSimpleName().contains("ExpandableNotificationRow")) continue;   // não desce nos cartões
+            if (findHeader(ch, depth + 1)) return true;
+        }
+        return false;
+    }
+
     /** HyperOS 4 (sem cabeçalho): tocar no primeiro cartão do grupo aberto volta a empilhar. */
     static boolean collapseFromFirst(Object child) {
         try {
-            if (!adapters) return false;
+            if (!adapters || openingFirst) return false;
             Object parent = Refl.call(child, "getNotificationParent");
             if (parent == null || stacked(parent)) return false;
+            if (headerShown(parent)) {
+                if (firstLogs++ < 4) ElasticCard.log("grupos em pilha: cabeçalho do grupo visível, 1º cartão abre normalmente");
+                return false;
+            }
             Object c = Refl.get(parent, "mChildrenContainer");
             Object kids = c == null ? null : Refl.get(c, "mAttachedChildren");
             if (!(kids instanceof List) || ((List) kids).isEmpty() || ((List) kids).get(0) != child) return false;

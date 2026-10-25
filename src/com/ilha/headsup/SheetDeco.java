@@ -116,7 +116,10 @@ final class SheetDeco extends View {
         Paint layer = new Paint();
         layer.setBlendMode(MediaCut.mode(nightI));
         float ir = r * 1.12f;
-        if (Kg.snapL != null && Kg.snapR != null) {
+        // HyperOS 4: os ícones dos atalhos do bloqueio vêm dos recursos (seguem o sistema e o tema);
+        // a cópia da tela fica só para o HyperOS 3
+        boolean aff = !Kg.pluginSnap && (Kg.composeAff || Kg.affTorchOff != 0 || Kg.affTorchOn != 0 || Kg.affCamera != 0);
+        if (!aff && Kg.snapL != null && Kg.snapR != null) {
             Paint bp = new Paint(Paint.FILTER_BITMAP_FLAG);
             bp.setColorFilter(new android.graphics.PorterDuffColorFilter(torch ? 0xFF222222 : vcol, android.graphics.PorterDuff.Mode.SRC_IN));
             if (!torch) c.saveLayer(lx - ir, cy - ir, lx + ir, cy + ir, layer);

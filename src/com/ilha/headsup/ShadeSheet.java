@@ -980,6 +980,21 @@ final class ShadeSheet {
 
     static boolean closingWait;
 
+    /** Topo dos botões de baixo da cortina (com folga), nas coordenadas da lista; NaN sem botões. */
+    static float buttonLimit(View host) {
+        try {
+            SheetDeco dv = decoV;
+            if (dv == null || dv.btnY <= 0 || dv.getParent() == null || host == null) return Float.NaN;
+            float d = host.getResources().getDisplayMetrics().density;
+            int[] hl = new int[2], dl = new int[2];
+            host.getLocationInWindow(hl);
+            dv.getLocationInWindow(dl);
+            return dl[1] + dv.btnY - 28f * d - 14f * d - hl[1];
+        } catch (Throwable t) {
+            return Float.NaN;
+        }
+    }
+
     // ------------------------------------------------------------------ troca lateral (centro de controle <-> cortina)
 
     static Object swCtl;
@@ -1417,7 +1432,7 @@ final class ShadeSheet {
         v.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
             public boolean onPreDraw() {
                 try {
-                    if (!on && Prefs.shadeSheet && Kg.snapL == null && locked(v)) Kg.snapBottom(v);   // copia os botões do bloqueio
+                    if (!on && Prefs.shadeSheet && locked(v) && (Kg.snapL == null || android.os.SystemClock.uptimeMillis() - Kg.snapAt > 30000)) Kg.snapBottom(v);   // copia os botões do bloqueio
                     if (on) {
                         layoutList(v, true);
                         if (decoV != null) {   // relógio e título acompanham cada quadro da rolagem (inclusive a volta ao topo)

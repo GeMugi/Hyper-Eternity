@@ -324,18 +324,57 @@ final class Kg {
     static void snapBottom(View root) {
         try {
             bestL = bestR = null;
+            snapAt = android.os.SystemClock.uptimeMillis();
             int w = root.getWidth(), h = root.getHeight();
             if (w <= 0) return;
             float d = root.getResources().getDisplayMetrics().density;
-            look(root, w, h, d);
+            pluginSnap = false;
+            Object scv = shortcutCtl == null ? null : Refl.get(shortcutCtl, "shortcutContainerView");
+            if (scv instanceof View && ((View) scv).isShown()) {
+                // atalhos do plugin do bloqueio (HyperOS 4): os ícones que estão na tela, com o tema
+                lookAny((View) scv, w, h, d);
+                if (bestL != null && bestR != null) pluginSnap = true;
+                else bestL = bestR = null;
+            }
+            if (!pluginSnap) look(root, w, h, d);
             if (bestL == null || bestR == null) return;
             rectL = rectOf(bestL);
             rectR = rectOf(bestR);
             snapL = shot(bestL);
             snapR = shot(bestR);
-            ElasticCard.log("cortina: botões do bloqueio copiados (" + bestL.getClass().getSimpleName() + " " + rectL + ", " + bestR.getClass().getSimpleName() + " " + rectR + ")");
+            if (snapLogs++ < 4) ElasticCard.log("cortina: botões do bloqueio copiados" + (pluginSnap ? " do plugin de atalhos" : "") + " (" + idName(bestL) + "/" + idName(bestR) + " " + bestL.getClass().getSimpleName() + " " + rectL + ", " + bestR.getClass().getSimpleName() + " " + rectR + ")");
         } catch (Throwable t) {
             ElasticCard.log("cortina: copiar botões falhou: " + t);
+        }
+    }
+
+
+    static Object shortcutCtl;
+    static long snapAt;
+    static int snapLogs;
+    static boolean pluginSnap;   // ícones copiados dos atalhos do plugin (HyperOS 4)
+
+    static String idName(View v) {
+        try { return v.getId() == View.NO_ID ? "-" : v.getResources().getResourceEntryName(v.getId()); } catch (Throwable t) { return "?"; }
+    }
+
+    /** Dentro do plugin de atalhos: a maior imagem de cada canto de baixo (qualquer id). */
+    static void lookAny(View v, int w, int h, float d) {
+        if (v.getVisibility() != View.VISIBLE || v.getAlpha() <= 0.05f) return;
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) lookAny(g.getChildAt(i), w, h, d);
+            if (g.getChildCount() > 0) return;
+        }
+        if (!(v instanceof ImageView) || ((ImageView) v).getDrawable() == null) return;
+        int vw = v.getWidth(), vh = v.getHeight();
+        if (vw < 16 * d || vh < 16 * d || vw > 110 * d || vh > 110 * d) return;
+        android.graphics.Rect r = rectOf(v);
+        if (r.centerY() < h * 0.75f) return;
+        if (r.centerX() < w * 0.35f) {
+            if (bestL == null || vw * vh > bestL.getWidth() * bestL.getHeight()) bestL = v;
+        } else if (r.centerX() > w * 0.65f) {
+            if (bestR == null || vw * vh > bestR.getWidth() * bestR.getHeight()) bestR = v;
         }
     }
 
@@ -380,12 +419,14 @@ final class Kg {
     }
 
     static Drawable icon(View root, boolean isTorch) {
-        scan(root);
-        Drawable d = isTorch ? torch : camera;
-        if (d != null) return d;
-        // HyperOS 4: os ícones dos atalhos do bloqueio (os mesmos que ele desenha em Compose)
-        int id = isTorch ? (SheetDeco.torch && affTorchOn != 0 ? affTorchOn : affTorchOff) : affCamera;
-        if (id == 0) return null;
+        // HyperOS 4: os ícones dos atalhos do bloqueio (os mesmos que ele desenha em Compose), pelos
+        // recursos do sistema: seguem o tema aplicado
+        int id = isTorch ? (SheetDeco.torch && affTorchOn != 0 ? affTorchOn : (affTorchOff != 0 ? affTorchOff : affTorchOn)) : affCamera;
+        if (id == 0) {
+            if (composeAff) return null;   // HyperOS 4: usa os ícones do sistema (pelo nome), nunca cópias da tela
+            scan(root);
+            return isTorch ? torch : camera;
+        }
         Drawable c = affCache.get(id);
         if (c == null) {
             try {
@@ -398,13 +439,27 @@ final class Kg {
     }
 
     static int affTorchOn, affTorchOff, affCamera;
+    static boolean composeAff;   // HyperOS 4: atalhos do bloqueio em Compose
     static final java.util.HashMap<Integer, Drawable> affCache = new java.util.HashMap<>();
     static int affLogs;
 
     /** HyperOS 4: guarda os ícones que os atalhos do bloqueio usam (lanterna acesa/apagada e câmera). */
     static void hookAffordances(ClassLoader cl) {
+        // HyperOS 4: os atalhos do bloqueio são desenhados por um plugin (segue o tema); guarda o controle
+        try {
+            Class sc = Class.forName("com.android.keyguard.shortcut.MiuiShortcutController", false, cl);
+            for (java.lang.reflect.Constructor k : sc.getDeclaredConstructors()) {
+                com.ilha.headsup.xp.XposedBridge.hookMethod(k, new com.ilha.headsup.xp.XC_MethodHook() {
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        shortcutCtl = p.thisObject;
+                    }
+                });
+            }
+        } catch (Throwable ignored) {
+        }
         try {
             Class vis = Class.forName("com.android.systemui.keyguard.data.quickaffordance.KeyguardQuickAffordanceConfig$LockScreenState$Visible", false, cl);
+            composeAff = true;
             for (java.lang.reflect.Constructor k : vis.getDeclaredConstructors()) {
                 com.ilha.headsup.xp.XposedBridge.hookMethod(k, new com.ilha.headsup.xp.XC_MethodHook() {
                     protected void afterHookedMethod(MethodHookParam p) {

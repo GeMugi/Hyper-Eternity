@@ -757,6 +757,9 @@ final class StackHooks {
                 // cortina: a altura que o HyperOS informa é a da central dele (bem menor), e a cortina
                 // ainda desce os cartões depois. O limite é o fim da tela, descontada essa descida.
                 E = host.getHeight() - Prefs.stOffset * d - ShadeSheet.shift();
+                // nunca por cima da lanterna/câmera da cortina (a posição deles vem do bloqueio)
+                float lim = ShadeSheet.buttonLimit(host);
+                if (!Float.isNaN(lim)) E = Math.min(E, lim - Prefs.stOffset * d - ShadeSheet.shift());
             } else {
                 E = fTopPadding.getInt(amb) + ((Integer) mInnerHeight.invoke(amb, Boolean.FALSE)).intValue()
                         - Prefs.stOffset * d;
