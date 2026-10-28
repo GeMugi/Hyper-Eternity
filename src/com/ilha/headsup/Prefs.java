@@ -23,9 +23,10 @@ final class Prefs {
                 }
             };
 
-    static boolean huEnabled, huNoActions, huSeparate;
+    static boolean huEnabled, huNoActions, huSeparate, huHideArrow;
     static int huSpeed, huBounce, huStyle, huIosSpeed, huIosBounce;
-    static boolean stEnabled, stGroups;
+    static boolean stEnabled, stGroups, landSplit, landMini;
+    static boolean lockWidgets, lwBattery = true, lwWeather = true, lwAgenda = true, lwSteps = true;
     static int stOffset;
     static boolean kgEnabled, kgScroll, kgIos, kgClock, kgClockFixed, kgBlur, kgHmc, kgKeep;
     static int kgOffset, kgStart;
@@ -52,6 +53,8 @@ final class Prefs {
     static boolean kgHide = Keys.D_KG_HIDE;
     static boolean privOn = Keys.D_PRIV_ON, privUnlocked = Keys.D_PRIV_UNLOCKED;
     static java.util.Set<String> privApps = new java.util.HashSet<>(), privConvs = new java.util.HashSet<>(), privContacts = new java.util.HashSet<>();
+    static boolean barOn = Keys.D_BAR_ON, sheetPlayerFree = Keys.D_SHEET_PLAYER_FREE;
+    static int barDx = Keys.D_BAR_DX, barDy = Keys.D_BAR_DY, barW = Keys.D_BAR_W, barH = Keys.D_BAR_H, barA = Keys.D_BAR_A;
     static int gsSpeed = Keys.D_GS_SPEED, gsBounce = Keys.D_GS_BOUNCE, gsDepth = Keys.D_GS_DEPTH, gsShadow = Keys.D_GS_SHADOW;
 
     static {
@@ -162,10 +165,18 @@ final class Prefs {
         huIosSpeed = clamp(p.getInt(Keys.HU_IOS_SPEED, Keys.D_HU_IOS_SPEED), 50, 200);
         huIosBounce = clamp(p.getInt(Keys.HU_IOS_BOUNCE, Keys.D_HU_IOS_BOUNCE), 0, 200);
         huNoActions = b(p, Keys.HU_NO_ACTIONS, Keys.D_HU_NO_ACTIONS);
+        huHideArrow = b(p, Keys.HU_HIDE_ARROW, Keys.D_HU_HIDE_ARROW);
         huSeparate = b(p, Keys.HU_SEPARATE, Keys.D_HU_SEPARATE);
         stEnabled = b(p, Keys.ST_ENABLED, Keys.D_ST_ENABLED);
         stOffset = clamp(p.getInt(Keys.ST_OFFSET, Keys.D_ST_OFFSET), 0, 400);
         stGroups = b(p, Keys.ST_GROUPS, Keys.D_ST_GROUPS);
+        landSplit = b(p, Keys.LAND_SPLIT, Keys.D_LAND_SPLIT);
+        lockWidgets = b(p, Keys.LOCK_WIDGETS, Keys.D_LOCK_WIDGETS);
+        lwBattery = b(p, Keys.LW_BATTERY, true);
+        lwWeather = b(p, Keys.LW_WEATHER, true);
+        lwAgenda = b(p, Keys.LW_AGENDA, true);
+        lwSteps = b(p, Keys.LW_STEPS, true);
+        landMini = b(p, Keys.LAND_MINI, Keys.D_LAND_MINI);
         kgEnabled = b(p, Keys.KG_ENABLED, Keys.D_KG_ENABLED);
         kgScroll = b(p, Keys.KG_SCROLL, Keys.D_KG_SCROLL);
         kgOffset = clamp(p.getInt(Keys.KG_OFFSET, Keys.D_KG_OFFSET), 40, 500);
@@ -245,6 +256,13 @@ final class Prefs {
         privContacts = lines(p.getString(Keys.PRIV_CONTACTS, ""));
         gsSpeed = clamp(p.getInt(Keys.GS_SPEED, Keys.D_GS_SPEED), 50, 200);
         gsBounce = clamp(p.getInt(Keys.GS_BOUNCE, Keys.D_GS_BOUNCE), 0, 300);
+        barOn = b(p, Keys.BAR_ON, Keys.D_BAR_ON);
+        sheetPlayerFree = b(p, Keys.SHEET_PLAYER_FREE, Keys.D_SHEET_PLAYER_FREE);
+        barDx = clamp(p.getInt(Keys.BAR_DX, Keys.D_BAR_DX), -80, 80);
+        barDy = clamp(p.getInt(Keys.BAR_DY, Keys.D_BAR_DY), -30, 60);
+        barW = clamp(p.getInt(Keys.BAR_W, Keys.D_BAR_W), 10, 90);
+        barH = clamp(p.getInt(Keys.BAR_H, Keys.D_BAR_H), 2, 14);
+        barA = clamp(p.getInt(Keys.BAR_A, Keys.D_BAR_A), 10, 100);
         gsDepth = clamp(p.getInt(Keys.GS_DEPTH, Keys.D_GS_DEPTH), 4, 30);
         gsShadow = clamp(p.getInt(Keys.GS_SHADOW, Keys.D_GS_SHADOW), 0, 100);
         lyricShift = clamp(p.getInt(Keys.LYRIC_SHIFT, Keys.D_LYRIC_SHIFT), -20, 30);

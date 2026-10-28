@@ -16,9 +16,9 @@ public final class ElasticCard {
 
     static void log(String msg) {
         try {
-            if (logs++ < 80) {
+            if (logs++ < 250) {
                 com.ilha.headsup.xp.XposedBridge.log("[HeadsUpIlha] " + msg);
-                android.util.Log.i("HeadsUpIlha", msg);
+                android.util.Log.w("HeadsUpIlha", msg);
             }
         } catch (Throwable ignored) {
         }
@@ -140,13 +140,14 @@ public final class ElasticCard {
             anim.addUpdateListener(frame);
             anim.addListener(frame);
             states.put(view, st);
-            if (mode == ElasticState.IOS_IN) st.attachDrop(view);
+            // sem gota
             st.tick(0.0f);
             anim.start();
             if (mode == ElasticState.ISLAND) {
                 log("animação OriginOS iniciada (altura=" + Refl.height(view) + "px, ilha em y=" + (int) st.islandCY + ")");
             } else {
-                log("animação iOS iniciada, com a gota (altura=" + Refl.height(view) + "px, nasce do " + st.anchorName() + " em x=" + (int) st.originX + " y=" + (int) st.originY + ")");
+                NotifBar.hide(false);
+                log("animação iOS iniciada (altura=" + Refl.height(view) + "px, nasce do " + st.anchorName() + " em x=" + (int) st.originX + " y=" + (int) st.originY + ")");
             }
         } catch (Throwable t) {
             log("ERRO ao iniciar: " + t);
@@ -182,7 +183,7 @@ public final class ElasticCard {
             anim.addUpdateListener(frame);
             anim.addListener(frame);
             states.put(view, st);
-            st.attachDrop(view);
+            // sem gota na saída: encolhe até a barrinha abaixo do relógio
             st.tick(0.0f);
             anim.start();
             if (exitLogs++ < 3) log("saída iOS iniciada (volta para o " + st.anchorName() + " em x=" + (int) st.originX + " y=" + (int) st.originY + ")");

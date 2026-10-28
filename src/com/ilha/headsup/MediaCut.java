@@ -52,6 +52,7 @@ final class MediaCut {
             ElasticCard.log("barra vazada: instalado");
         } catch (Throwable t) {
             ElasticCard.log("barra vazada indisponível " + t);
+            Caps.fail(Keys.MEDIA_CUT, t);
         }
     }
 
@@ -110,6 +111,18 @@ final class MediaCut {
             if (nm.contains("prev") || nm.contains("next")) skips.add(ib);
         }
         if (logs < 12) ElasticCard.log("vibrance extra: artista=" + (artist != null) + " botões de pular=" + skips.size());
+        // o player compacto da paisagem desenha a capa e os botões deste player (os mesmos drawables)
+        try {
+            java.util.ArrayList<java.lang.ref.WeakReference<android.widget.ImageView>> acts = new java.util.ArrayList<>();
+            for (String f : new String[]{"action0", "action1", "action2", "action3", "action4"}) {
+                Object o = Refl.get(holder, f);
+                if (o instanceof android.widget.ImageView) acts.add(new java.lang.ref.WeakReference<>((android.widget.ImageView) o));
+            }
+            LandMini.srcActions = acts;
+            LandMini.srcBar = new java.lang.ref.WeakReference<View>(bar);
+            LandMini.srcAlbum = cm.album == null ? null : new java.lang.ref.WeakReference<>(cm.album);
+        } catch (Throwable ignored) {
+        }
         final Paint skipPaint = new Paint();
         // a cada quadro confere o tema e as intensidades: troca sozinho entre claro e escuro
         bar.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {

@@ -94,6 +94,7 @@ final class Privacy {
             ElasticCard.log("privacidade: instalada");
         } catch (Throwable t) {
             ElasticCard.log("privacidade: indisponível " + t);
+            Caps.fail(Keys.PRIV_ON, t);
         }
     }
 

@@ -89,6 +89,7 @@ final class RecPill {
             ElasticCard.log("pílula da gravação: pronta");
         } catch (Throwable t) {
             ElasticCard.log("pílula da gravação indisponível: " + t);
+            Caps.fail(Keys.REC_PILL, t);
         }
     }
 

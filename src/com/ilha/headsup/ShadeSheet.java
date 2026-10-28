@@ -63,8 +63,12 @@ final class ShadeSheet {
             // durante o nosso puxar, a lista não recebe o dedo (senão as notificações rolavam junto)
             XposedBridge.hookMethod(pv.getDeclaredMethod("dispatchTouchEvent", android.view.MotionEvent.class), new XC_MethodHook() {
                 protected void beforeHookedMethod(MethodHookParam p) {
-                    if (dead()) return;
                     android.view.MotionEvent me = (android.view.MotionEvent) p.args[0];
+                    if (forwardLand(me)) { p.setResult(Boolean.TRUE); return; }   // player movido (paisagem)
+                    if (dead()) return;
+                    // HyperOS 4: com uma heads-up na tela, o puxar começa em cima dela (a barra de status fica
+                    // por baixo) e chega aqui; a cortina assume como se fosse da barra de status
+                    if (huGesture(p, me)) return;   // puxar por cima de uma heads-up (lógica própria)
                     if ((on || dragging) && !transfer && !sbTake) feed(me);   // cortina aberta: barrinha de baixo para fechar
                     if (me.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && (transfer || dragging)
                             && android.os.SystemClock.uptimeMillis() - lastOurTouch > 400) {
@@ -78,6 +82,16 @@ final class ShadeSheet {
                     if (transfer || dragging) p.setResult(Boolean.TRUE);   // só enquanto o dedo arrasta a cortina
                 }
             });
+            try {
+                for (java.lang.reflect.Constructor k : Class.forName("com.android.systemui.statusbar.notification.headsup.HeadsUpManagerImpl", false, cl).getDeclaredConstructors()) {
+                    XposedBridge.hookMethod(k, new XC_MethodHook() {
+                        protected void afterHookedMethod(MethodHookParam p) {
+                            hum = p.thisObject;
+                        }
+                    });
+                }
+            } catch (Throwable ignored) {
+            }
             for (java.lang.reflect.Constructor k : Class.forName("com.android.systemui.shade.ShadeControllerImpl", false, cl).getDeclaredConstructors()) {
                 XposedBridge.hookMethod(k, new XC_MethodHook() {
                     protected void afterHookedMethod(MethodHookParam p) {
@@ -316,6 +330,7 @@ final class ShadeSheet {
             ElasticCard.log("cortina: pronta");
         } catch (Throwable t) {
             ElasticCard.log("cortina indisponível: " + t);
+            Caps.fail(Keys.SHADE_SHEET, t);
         }
     }
 
@@ -472,10 +487,31 @@ final class ShadeSheet {
             final java.lang.reflect.Field fState = Refl.field(ssa, "mTempAlgorithmState");
             final java.lang.reflect.Field fVis = Refl.field(Class.forName(P + "StackScrollAlgorithm$StackScrollAlgorithmState", false, cl), "visibleChildren");
             XposedBridge.hookMethod(ssa.getDeclaredMethod("resetViewStates", amb, int.class), new XC_MethodHook() {
+                protected void beforeHookedMethod(MethodHookParam p) {
+                    shiftedNow = false;
+                    landHide(p.thisObject, p.args[0]);   // paisagem: o player sai da conta da lista nesta passada
+                }
+
                 protected void afterHookedMethod(MethodHookParam p) {
+                    landRestore();
                     try {
+                        if (on && landNow) {
+                            titleExtra = 0;
+                            if (playerGap != 0) playerGap = 0;
+                            landPlayer(p.thisObject, p.args[0]);
+                            return;
+                        }
+                        if (!on && (splitNow || landDirty || splitTx || splitLp != null)) {   // gaveta padrão em paisagem (opção)
+                            landPlayer(p.thisObject, p.args[0]);
+                            return;
+                        }
+                        landMoved = false;
+                        resetLandFrom(p.thisObject);
                         int e = Math.round(CurtainClock.e) + listExtra;
-                        if (!on || e <= 0) { titleExtra = 0; return; }
+                        if (!on || e <= 0) {
+                            titleExtra = 0;
+                            return;
+                        }
                         Object st = fState.get(p.thisObject);
                         Object vis = st == null ? null : fVis.get(st);
                         if (!(vis instanceof java.util.List)) return;
@@ -497,6 +533,7 @@ final class ShadeSheet {
                             if (fh != null && fh.getBoolean(vs) && !shelf && y + e + hgt > 0) fh.setBoolean(vs, false);
                         }
                         pile((java.util.List) vis, p.thisObject);
+                        shiftedNow = true;   // a pilha da gaveta, se vier depois, já vê as posições descidas
                         if (shiftLogs++ < 3) ElasticCard.log("cortina: cartões descidos " + e + "px (relógio sobe ao rolar)");
                         if (decoV != null) decoV.postInvalidateOnAnimation();
                     } catch (Throwable t) {
@@ -505,10 +542,80 @@ final class ShadeSheet {
                 }
             });
             Class nc = Class.forName(P + "NotificationStackScrollLayout", false, cl);
+            // cortina: a lista some suave logo acima da lanterna e da câmera (nada passa por baixo delas)
+            try {
+                XposedBridge.hookMethod(nc.getDeclaredMethod("dispatchDraw", android.graphics.Canvas.class), new XC_MethodHook() {
+                    protected void beforeHookedMethod(MethodHookParam p) {
+                        fadeSave = -1;
+                        try {
+                            View l = (View) p.thisObject;
+                            if (!active() || l.getWidth() > 0 && l.getRootView().getWidth() > l.getRootView().getHeight()) return;
+                            float lim = buttonLimit(l);
+                            if (Float.isNaN(lim) || lim <= 0 || lim > l.getHeight() + 4000) return;
+                            float d = l.getResources().getDisplayMetrics().density;
+                            android.graphics.Canvas c = (android.graphics.Canvas) p.args[0];
+                            int w = l.getWidth();
+                            fadeLim = lim + 10 * d;
+                            // só corte (sem camada): a camada desligava o vidro/desfoque dos cartões
+                            fadeSave = c.save();
+                            c.clipRect(-w, -100000f, 2f * w, fadeLim);
+                            if (fadeLogs++ < 2) ElasticCard.log("cortina: lista termina acima dos botões (" + Math.round(fadeLim) + "px)");
+                        } catch (Throwable t) {
+                            fadeSave = -1;
+                        }
+                    }
+
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        if (fadeSave < 0) return;
+                        try {
+                            android.graphics.Canvas c = (android.graphics.Canvas) p.args[0];
+                            c.restoreToCount(fadeSave);
+                        } catch (Throwable ignored) {
+                        } finally {
+                            fadeSave = -1;
+                        }
+                    }
+                });
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: fim da lista acima dos botões indisponível: " + t);
+            }
+            // paisagem: o player movido para baixo do relógio não é "o cartão debaixo do dedo" na coluna
+            // das notificações (o HyperOS ignora o deslocamento lateral ao procurar o cartão tocado)
+            try {
+                for (java.lang.reflect.Method m : nc.getDeclaredMethods()) {
+                    if (!m.getName().equals("getChildAtPosition")) continue;
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        protected void beforeHookedMethod(MethodHookParam p) {
+                            pickHidden = null;
+                            try {
+                                View pv = playerView;
+                                if (!landMoved || pv == null || pv.getParent() != p.thisObject || fViewFlags == null) return;
+                                int f = fViewFlags.getInt(pv);
+                                fViewFlags.setInt(pv, (f & ~0x0C) | 0x08);
+                                pickHidden = pv;
+                            } catch (Throwable ignored) {
+                            }
+                        }
+
+                        protected void afterHookedMethod(MethodHookParam p) {
+                            View pv = pickHidden;
+                            pickHidden = null;
+                            if (pv == null) return;
+                            try { fViewFlags.setInt(pv, fViewFlags.getInt(pv) & ~0x0C); } catch (Throwable ignored) {}
+                        }
+                    });
+                }
+            } catch (Throwable t) {
+                ElasticCard.log("cortina paisagem: toque nos cartões: " + t);
+            }
             XposedBridge.hookMethod(nc.getDeclaredMethod("getScrollRange"), new XC_MethodHook() {
                 protected void afterHookedMethod(MethodHookParam p) {
+                    if (landMoved) {   // paisagem: o player saiu da lista, a rolagem perde a altura dele
+                        p.setResult(Integer.valueOf(Math.max(0, ((Integer) p.getResult()).intValue() - Math.round(landUp))));
+                        return;
+                    }
                     int e = Math.round(CurtainClock.e) + listExtra + playerGap;
-                    if (on && e > 0) p.setResult(Integer.valueOf(((Integer) p.getResult()).intValue() + e));
+                    if (on && e > 0 && !landNow) p.setResult(Integer.valueOf(((Integer) p.getResult()).intValue() + e));
                 }
             });
             // sem o elástico do fim da lista na cortina: ao chegar no topo ou no fim, a lista (com o
@@ -534,10 +641,20 @@ final class ShadeSheet {
             ElasticCard.log("cortina: relógio que sobe indisponível: " + t);
         }
     }
-    static int overLogs, hideLogs, swLogs;
+    static int endLogs, overLogs, hideLogs, swLogs, fadeLogs, fadeSave = -1;
+    static float fadeLim;
+    static android.graphics.Paint fadePaint;
 
     /** Quanto a cortina desce os cartões depois do algoritmo do HyperOS (relógio + lista + título). */
+    static boolean shiftedNow;
+
+    /** Quanto a pilha da gaveta ainda precisa descontar: 0 se a cortina já desceu os cartões nesta passada. */
+    static int pendingShift() {
+        return shiftedNow ? 0 : shift();
+    }
+
     static int shift() {
+        if (landNow) return 0;
         int e = Math.round(CurtainClock.e) + listExtra;
         return e > 0 ? e + playerGap : 0;
     }
@@ -587,6 +704,11 @@ final class ShadeSheet {
      * viram uma pilha (empilhamento reverso): encolhem, apagam e ficam presos ali.
      */
     static void pile(java.util.List vis, Object ssa) throws Throwable {
+        if (Prefs.sheetPlayerFree) {   // player rola com a lista (sem fixar abaixo do relógio)
+            if (playerGap != 0) { playerGap = 0; requestStack(); }
+            if (titleExtra != 0) { titleExtra = 0; playerView = null; if (decoV != null) decoV.postInvalidateOnAnimation(); }
+            return;
+        }
         Object player = null, pvs = null;
         for (Object c : vis) {
             if (c.getClass().getSimpleName().contains("MediaHeader")) { player = c; pvs = Refl.call(c, "getViewState"); break; }
@@ -855,13 +977,17 @@ final class ShadeSheet {
             candidate = false;
             closing = false;
             listClose = false;
+            sideOk = false;
             if (animating) return;
             downX = e.getRawX();
             downY = e.getRawY();
+            sideFired = false;
+            sideOk = on && swCtl != null;
+            if (on && sideLogs < 6 && !sideOk) { sideLogs++; ElasticCard.log("cortina: deslizar lateral desligado neste toque (cartão embaixo do dedo=" + overCard(downX, downY) + ", controle=" + (swCtl != null) + ")"); }
             int w = v.getResources().getDisplayMetrics().widthPixels, h = v.getResources().getDisplayMetrics().heightPixels;
             boolean open = on && expanded();
-            if (!open && !expanded() && downY < 48f * d && downX < w * 0.5f) candidate = true;          // topo, lado das notificações
-            else if (open && downY > h - 90f * d) { candidate = true; closing = true; }                  // barrinha de baixo
+            if (!open && !expanded() && downY < 48f * d && downX < w * 0.5f) candidate = true;          // topo, lado das notificações (ou a heads-up)
+            else if (open && downY > h - 90f * d && !inLandList(v, downX, downY, d)) { candidate = true; closing = true; }   // barrinha de baixo
             if (candidate) {
                 if (vt == null) vt = android.view.VelocityTracker.obtain();
                 vt.clear();
@@ -870,6 +996,7 @@ final class ShadeSheet {
             return;
         }
         lastRawY = e.getRawY();
+        if (act == android.view.MotionEvent.ACTION_MOVE) sideSwipe(v, e, d);
         if (!candidate) return;
         vt.addMovement(e);
         float dy = e.getRawY() - downY, dx = e.getRawX() - downX;
@@ -913,6 +1040,7 @@ final class ShadeSheet {
     /** Começo do puxar: a central abre na hora (sem as animações do HyperOS) escondida acima da tela. */
     static void begin(View v) {
         closingWait = false;
+        if ((splitTx || splitLp != null) && nssl != null) splitOff(nssl);
         if (v.getAlpha() != 1f) v.setAlpha(1f);
         float h = v.getHeight() > 0 ? v.getHeight() : v.getResources().getDisplayMetrics().heightPixels;
         on = true;
@@ -980,10 +1108,426 @@ final class ShadeSheet {
 
     static boolean closingWait;
 
+    /** Paisagem: a lista desce até embaixo; o toque na coluna dela é da lista (rolar, limpar, tocar). */
+    static boolean inLandList(View v, float x, float y, float d) {
+        if (!landNow) return false;
+        float w = v.getWidth(), h = v.getHeight();
+        if (y > h - 22f * d) return false;   // barrinha de baixo continua fechando
+        return x >= w * LAND_SPLIT && x <= w - LAND_RIGHT * d;
+    }
+
+    // ------------------------------------------------------------------ paisagem: player embaixo do relógio
+
+    static boolean landNow, landMoved, landFwd, landDirty;
+    static float landUp;
+
+    /** Desfaz o player movido (voltou ao retrato ou acabaram as notificações). */
+    static void resetLand(Object pvs, java.lang.reflect.Method mx) {
+        if (!landDirty || pvs == null) return;
+        try {
+            if (mx == null) mx = VS.find(pvs.getClass(), "setXTranslation");
+            VS.inv(mx, pvs, 0f);
+            if (StackHooks.mSetScaleX != null) VS.inv(StackHooks.mSetScaleX, pvs, 1f);
+            if (StackHooks.mSetScaleY != null) VS.inv(StackHooks.mSetScaleY, pvs, 1f);
+            landDirty = false;
+        } catch (Throwable ignored) {
+        }
+    }
+
+    static void resetLandFrom(Object ssa) {
+        if (!landDirty) return;
+        try {
+            Object st = StackHooks.fTempState.get(ssa);
+            Object vis = st == null ? null : StackHooks.fVisible.get(st);
+            if (!(vis instanceof java.util.List)) return;
+            for (Object c : (java.util.List) vis)
+                if (c.getClass().getSimpleName().contains("MediaHeader")) resetLand(Refl.call(c, "getViewState"), null);
+        } catch (Throwable ignored) {
+        }
+    }
+    static int landLogs2;
+
+    /**
+     * Paisagem com o player e notificações: o player vai para a coluna do relógio (embaixo dele,
+     * reduzido se precisar, sem cobrir a lanterna) e as notificações sobem na coluna da direita.
+     * Sem notificações, o player fica onde o HyperOS o põe.
+     */
+    static View landHidden, pickHidden;
+    static java.lang.reflect.Field fViewFlags;
+
+    /**
+     * Antes do HyperOS calcular a lista em paisagem: o player conta como "fora" (GONE só nas flags, sem
+     * layout) e as notificações ficam no lugar dele de verdade, rolagem e cortes do próprio sistema.
+     */
+    static boolean splitNow, splitTx;
+
+    static boolean splitWant;
+    static long splitOkAt;
+    static int landVisBits;
+
+    static void landHide(Object ssa, Object amb) {
+        landHidden = null;
+        splitNow = false;
+        splitWant = false;
+        try {
+            if (StackHooks.fHost == null) return;
+            ViewGroup host = (ViewGroup) StackHooks.fHost.get(ssa);
+            if (host == null) return;
+            boolean curtain = on && landNow;
+            // medidas originais da lista em retrato (para voltar certo depois da paisagem)
+            View rt = host.getRootView();
+            // (o HyperOS reaplica as medidas dele ao girar: se a largura não é mais a nossa, é a original do retrato)
+            if (rt != null && rt.getWidth() < rt.getHeight() && host.getLayoutParams() instanceof ViewGroup.MarginLayoutParams
+                    && (splitLp == null || ((ViewGroup.MarginLayoutParams) host.getLayoutParams()).width != splitColW)) {
+                ViewGroup.MarginLayoutParams ml = (ViewGroup.MarginLayoutParams) host.getLayoutParams();
+                int g = ml instanceof android.widget.FrameLayout.LayoutParams ? ((android.widget.FrameLayout.LayoutParams) ml).gravity : -1;
+                portLp = new int[]{ml.width, ml.leftMargin, ml.rightMargin, g};
+            }
+            if (!curtain) {
+                // gaveta padrão: paisagem, fora do bloqueio, com a opção ligada
+                View root = host.getRootView();
+                if (on || !Prefs.landSplit || root == null || root.getWidth() <= root.getHeight()) return;
+                if (Boolean.TRUE.equals(Refl.call(amb, "isOnKeyguard"))) return;
+                float d = host.getResources().getDisplayMetrics().density;
+            }
+            View player = null;
+            boolean rows = false;
+            for (int i = 0; i < host.getChildCount(); i++) {
+                View c = host.getChildAt(i);
+                boolean media = c.getClass().getSimpleName().contains("MediaHeader");
+                // o player que nós mesmos deixamos sem alfa pode ter ficado INVISIBLE: continua sendo o player
+                if (c.getVisibility() != View.VISIBLE && !(media && landDirty && c.getVisibility() == View.INVISIBLE)) continue;
+                if (media) player = c;
+                else if (StackHooks.rowClass != null && StackHooks.rowClass.isInstance(c)) rows = true;
+            }
+            if (player == null || !rows) {
+                // uma passada sem o player/cartões (rolando, animação de abrir) não desfaz a divisão
+                if (!curtain && android.os.SystemClock.uptimeMillis() - splitOkAt < 700) splitWant = true;
+                return;
+            }
+            if (!curtain) splitOkAt = android.os.SystemClock.uptimeMillis();
+            if (!curtain) {
+                View root = host.getRootView();
+                float d = host.getResources().getDisplayMetrics().density;
+                splitWant = true;
+                if (splitLogs++ < 3) ElasticCard.log("gaveta paisagem: raiz " + root.getWidth() + "x" + root.getHeight() + ", lista " + host.getWidth() + "px em x=" + host.getLeft());
+                if (!splitLayout(host, root.getWidth(), d)) return;   // coluna ainda sendo montada
+            }
+            if (fViewFlags == null) { fViewFlags = View.class.getDeclaredField("mViewFlags"); fViewFlags.setAccessible(true); }
+            int f = fViewFlags.getInt(player);
+            landVisBits = f & 0x0C;
+            fViewFlags.setInt(player, (f & ~0x0C) | 0x08);   // GONE
+            landHidden = player;
+            splitNow = !curtain;
+        } catch (Throwable t) {
+            landHidden = null;
+            if (landLogs2++ < 4) ElasticCard.log("cortina paisagem: tirar o player da lista: " + t);
+        }
+    }
+
+    static int splitLogs;
+    static int[] splitLp, portLp;
+    static int splitColW = -99;
+
+    /** Retrato sem medida guardada: ocupa o que o pai der (0 = "pelas âncoras" no ConstraintLayout). */
+    static int lp0Width(View host) {
+        return host.getParent() != null && host.getParent().getClass().getName().contains("Constraint")
+                || (host.getParent() != null && host.getParent().getClass().getSuperclass() != null && host.getParent().getClass().getSuperclass().getName().contains("Constraint"))
+                ? 0 : ViewGroup.LayoutParams.MATCH_PARENT;
+    }
+    static int chainLogs;   // largura, margem esquerda, gravidade originais da lista (gaveta padrão)
+
+    /**
+     * Gaveta padrão em paisagem: a lista vira a coluna da direita. Se ela ocupa a tela toda (cartões
+     * com margem), a largura dela passa a ~45% da tela, encostada no X de limpar.
+     */
+    static boolean splitLayout(View host, int W, float d) {
+        try {
+            int colW = Math.round(W * 0.45f);
+            // já cabe em duas colunas (ou já foi encolhida): segue; senão encolhe para ~45% da tela
+            int wantL = Math.round(W - 112 * d - colW), wantR = Math.round(112 * d);
+            ViewGroup.LayoutParams lp0 = host.getLayoutParams();
+            boolean ours = lp0 instanceof ViewGroup.MarginLayoutParams && lp0.width == colW
+                    && ((ViewGroup.MarginLayoutParams) lp0).leftMargin == wantL && ((ViewGroup.MarginLayoutParams) lp0).rightMargin == wantR;
+            // já é a nossa coluna (no lugar pelas margens, como na cortina: deslocar a lista cortava o player)
+            if (ours && Math.abs(host.getWidth() - colW) <= 2) return true;
+            if (!ours && host.getWidth() <= colW + 2 && splitLp == null) return W - 112 * d - host.getWidth() >= W * 0.35f;
+            if (!(host.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) return false;
+            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) host.getLayoutParams();
+            if (splitLp == null) {
+                int g = lp instanceof android.widget.FrameLayout.LayoutParams ? ((android.widget.FrameLayout.LayoutParams) lp).gravity : -1;
+                splitLp = new int[]{lp.width, lp.leftMargin, lp.rightMargin, g};
+            }
+            lp.width = colW;
+            splitColW = colW;
+            lp.leftMargin = wantL;
+            lp.rightMargin = wantR;
+            if (lp instanceof android.widget.FrameLayout.LayoutParams) ((android.widget.FrameLayout.LayoutParams) lp).gravity = android.view.Gravity.TOP | android.view.Gravity.LEFT;
+            host.setLayoutParams(lp);
+            if (splitLogs++ < 4) ElasticCard.log("gaveta paisagem: lista de " + host.getWidth() + "px vira coluna de " + colW + "px à direita");
+            return false;   // a largura nova vale na próxima passada
+        } catch (Throwable t) {
+            if (splitLogs++ < 6) ElasticCard.log("gaveta paisagem: coluna: " + t);
+            return false;
+        }
+    }
+
+    /** Desfaz a lista deslocada da gaveta padrão. */
+    /** Área (janela) em que os pais da lista deixam desenhar: o menor retângulo dos que cortam os filhos. */
+    static float[] clipArea(View host) {
+        float l = -1e9f, t = -1e9f, r = 1e9f, b = 1e9f;
+        boolean any = false;
+        int[] p = new int[2];
+        for (android.view.ViewParent vp = host.getParent(); vp instanceof ViewGroup; vp = vp.getParent()) {
+            ViewGroup g = (ViewGroup) vp;
+            if (g.getParent() == null) break;   // a janela inteira não conta
+            // corta quem corta os filhos, quem corta pelo contorno (cantos do painel) ou tem recorte próprio
+            android.graphics.Rect cb = g.getClipBounds();
+            if (!g.getClipChildren() && !g.getClipToOutline() && cb == null) continue;
+            g.getLocationInWindow(p);
+            float gl = p[0], gt = p[1], gr = p[0] + g.getWidth(), gb = p[1] + g.getHeight();
+            if (cb != null) { gl = p[0] + cb.left; gt = p[1] + cb.top; gr = p[0] + cb.right; gb = p[1] + cb.bottom; }
+            l = Math.max(l, gl);
+            t = Math.max(t, gt);
+            r = Math.min(r, gr);
+            b = Math.min(b, gb);
+            any = true;
+        }
+        if (chainLogs++ < 1) {
+            StringBuilder sb = new StringBuilder("gaveta paisagem: pais da lista:");
+            for (android.view.ViewParent vp = host.getParent(); vp instanceof ViewGroup; vp = vp.getParent()) {
+                ViewGroup g = (ViewGroup) vp;
+                g.getLocationInWindow(p);
+                sb.append(" | ").append(g.getClass().getSimpleName()).append(' ').append(p[0]).append('+').append(g.getWidth())
+                        .append(g.getClipChildren() ? " clipF" : "").append(g.getClipToOutline() ? " clipO" : "").append(g.getClipBounds() != null ? " clipB" + g.getClipBounds() : "");
+            }
+            ElasticCard.log(sb.toString());
+        }
+        if (any && splitLogs++ < 6) ElasticCard.log("gaveta paisagem: área que não corta " + Math.round(l) + "," + Math.round(t) + "–" + Math.round(r) + "," + Math.round(b));
+        return any ? new float[]{l, t, r, b} : null;
+    }
+
+    static void splitOff(View host) {
+        splitTx = false;
+        LandMini.hide();
+        if (host != null && host.getTranslationX() != 0f) host.setTranslationX(0f);
+        if (host != null && splitLp != null && host.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            // voltou ao retrato: as medidas do retrato (as da paisagem deixavam a lista de ponta a ponta)
+            View rt = host.getRootView();
+            boolean port = rt != null && rt.getWidth() < rt.getHeight();
+            int[] o = port && portLp != null ? portLp : splitLp;
+            if (port && portLp == null) o = new int[]{lp0Width(host), splitLp[1], splitLp[2], splitLp[3]};
+            if (splitLogs++ < 12) ElasticCard.log("gaveta paisagem: lista volta a " + o[0] + "px (margens " + o[1] + "/" + o[2] + ")" + (port ? " no retrato" : ""));
+            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) host.getLayoutParams();
+            lp.width = o[0];
+            lp.leftMargin = o[1];
+            lp.rightMargin = o[2];
+            if (o[3] != -1 && lp instanceof android.widget.FrameLayout.LayoutParams) ((android.widget.FrameLayout.LayoutParams) lp).gravity = o[3];
+            host.setLayoutParams(lp);
+        }
+        splitLp = null;
+    }
+
+    static void landRestore() {
+        View v = landHidden;
+        if (v == null) return;
+        try {
+            int f = fViewFlags.getInt(v);
+            fViewFlags.setInt(v, (f & ~0x0C) | landVisBits);   // como estava
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /**
+     * Paisagem com o player e notificações: o player vai para a coluna do relógio (embaixo dele,
+     * reduzido se precisar) e as notificações ocupam a coluna da direita desde o topo.
+     * Sem notificações, o player fica onde o HyperOS o põe.
+     */
+    static void landPlayer(Object ssa, Object amb) {
+        landMoved = false;
+        View pv = landHidden;
+        landHidden = null;
+        Object pvs = null;
+        java.lang.reflect.Method mx = null;
+        try {
+            if (pv == null && !splitWant && (splitTx || splitLp != null) && StackHooks.fHost != null) {
+                // gaveta fechando não desfaz (senão ao puxar de novo ela aparecia no meio antes de dividir)
+                View hv = (View) StackHooks.fHost.get(ssa);
+                View root = hv == null ? null : hv.getRootView();
+                boolean land = root != null && root.getWidth() > root.getHeight();
+                if (!land || !Prefs.landSplit || on || expanded()) splitOff(hv);
+            }
+            if (pv == null && splitWant) return;   // passada sem o player: mantém tudo como está
+            if (pv == null) LandMini.hide();
+            if (pv == null) {   // sem player fora da lista: desfaz o que tinha sido movido
+                if (landDirty && StackHooks.fHost != null) {
+                    ViewGroup host = (ViewGroup) StackHooks.fHost.get(ssa);
+                    for (int i = 0; host != null && i < host.getChildCount(); i++) {
+                        View c = host.getChildAt(i);
+                        if (c.getClass().getSimpleName().contains("MediaHeader")) resetLand(Refl.call(c, "getViewState"), null);
+                    }
+                }
+                return;
+            }
+            View host = (View) StackHooks.fHost.get(ssa);
+            pvs = Refl.call(pv, "getViewState");
+            if (host == null || pvs == null || StackHooks.mSetY == null || (!splitNow && decoV == null)) return;
+            mx = VS.find(pvs.getClass(), "setXTranslation");
+            float d = host.getResources().getDisplayMetrics().density;
+            int ph = pv.getHeight(), pw = pv.getWidth();
+            try { Object ih = Refl.call(pv, "getIntrinsicHeight"); if (ih instanceof Integer && ((Integer) ih).intValue() > 0) ph = ((Integer) ih).intValue(); } catch (Throwable ignored) {}
+            if (ph <= 0 || pw <= 0) return;
+            int[] hl = new int[2], dl = new int[2];
+            host.getLocationInWindow(hl);
+            float x0, x1, y0, y1;
+            if (splitNow) {
+                // gaveta padrão: a lista vai para a direita (antes do X de limpar) e o player fica à esquerda
+                View root = host.getRootView();
+                float W = root.getWidth(), H = root.getHeight();
+                float baseLeft = hl[0] - host.getTranslationX();
+                float newLeft = W - 112 * d - host.getWidth();
+                if (newLeft < W * 0.4f) { splitOff(host); return; }   // lista larga demais para duas colunas
+                float dx = newLeft - baseLeft;
+                if (Math.abs(host.getTranslationX() - dx) > 0.5f) host.setTranslationX(dx);
+                splitTx = true;
+                hl[0] = Math.round(newLeft);
+                float topPad = 0f;
+                try { if (StackHooks.fTopPadding != null && amb != null) topPad = StackHooks.fTopPadding.getInt(amb); } catch (Throwable ignored) {}
+                x0 = 24 * d;
+                x1 = newLeft - 24 * d;
+                y0 = hl[1] + topPad;
+                y1 = H - 24 * d;
+                // os painéis acima da lista cortam o que sai deles: o player fica dentro dessa área
+                float[] cl = clipArea(host);
+                if (cl != null) {
+                    float cx0 = Math.max(x0, cl[0] + 12 * d), cy0 = Math.max(y0, cl[1]), cy1 = Math.min(y1, cl[3] - 12 * d);
+                    // só vale se ainda sobrar espaço de verdade (senão o player sumia)
+                    if (Math.min((x1 - cx0) / pw, (cy1 - cy0) / ph) >= 0.45f) { x0 = cx0; y0 = cy0; y1 = cy1; }
+                    else if (splitLogs++ < 8) ElasticCard.log("gaveta paisagem: área sem corte pequena demais, ignorada");
+                }
+            } else {
+                decoV.getLocationInWindow(dl);
+                float colL = decoV.getWidth() * LAND_SPLIT;
+                x0 = dl[0] + 16 * d;
+                x1 = dl[0] + colL - 16 * d;   // lanterna foi para a direita
+                y0 = dl[1] + decoV.landClockBot + 14 * d;
+                y1 = dl[1] + decoV.getHeight() - 14 * d;
+            }
+            float s = Math.min(1f, Math.min((x1 - x0) / pw, (y1 - y0) / ph));
+            if (s < 0.4f) {
+                if (!splitNow) return;
+                s = 0.4f;   // gaveta padrão: o player já saiu da lista; nunca fica sem aparecer
+            }
+            if (splitNow && splitLogs++ < 10) ElasticCard.log("gaveta paisagem: player em " + Math.round(x0) + "–" + Math.round(x1) + " x " + Math.round(y0) + "–" + Math.round(y1) + " (" + Math.round(s * 100) + "%)");
+            float vw = pw * s, vh = ph * s;
+            float X = x0 + (x1 - x0 - vw) / 2f - hl[0], Y = y0 + Math.max(0f, (y1 - y0 - vh) / 2f) - hl[1];
+            float pivX = pv.getPivotX(), pivY = pv.getPivotY();
+            Refl.field(pvs.getClass(), "height").setInt(pvs, ph);
+            // com o player compacto, o do HyperOS sai da tela (a animação de abrir mexe no alfa dele)
+            VS.inv(mx, pvs, X - pivX * (1f - s) - pv.getLeft());
+            VS.inv(StackHooks.mSetY, pvs, Y - pivY * (1f - s));
+            if (StackHooks.mSetScaleX != null) VS.inv(StackHooks.mSetScaleX, pvs, s);
+            if (StackHooks.mSetScaleY != null) VS.inv(StackHooks.mSetScaleY, pvs, s);
+            // gaveta padrão com o player compacto: o do HyperOS fica invisível e o nosso aparece no lugar
+            boolean mini = false;   // o player compacto ficou de fora: vale o player original do HyperOS
+            // (alfa 0 de verdade faria o HyperOS deixar o player INVISIBLE e a próxima passada não o acharia)
+            if (StackHooks.mSetAlpha != null) VS.inv(StackHooks.mSetAlpha, pvs, 1f);   // fora da tela: serve de referência da animação
+            if (mini) {
+                if (StackHooks.mSetScaleX != null) VS.inv(StackHooks.mSetScaleX, pvs, 1f);
+                if (StackHooks.mSetScaleY != null) VS.inv(StackHooks.mSetScaleY, pvs, 1f);
+                LandMini.refY = vsF(pvs, "mYTranslation");
+                LandMini.ref = new java.lang.ref.WeakReference<>(pv);
+                LandMini.hostRef = new java.lang.ref.WeakReference<>(host);
+                float aw = x1 - x0, ah = y1 - y0;
+                float cw = Math.min(aw, ah * 320f / 340f), ch = cw * 340f / 320f;
+                int[] rl = new int[2];
+                host.getRootView().getLocationInWindow(rl);
+                LandMini.show(host.getRootView(), x0 + (aw - cw) / 2f - rl[0], y0 + Math.max(0f, (ah - ch) / 2f) - rl[1], cw, ch);
+            } else LandMini.hide();
+            java.lang.reflect.Field fc = Refl.field(pvs.getClass(), "clipTopAmount");
+            if (fc != null) fc.setInt(pvs, 0);
+            java.lang.reflect.Field fh = Refl.field(pvs.getClass(), "hidden");
+            if (fh != null) fh.setBoolean(pvs, false);
+            java.lang.reflect.Field fs = Refl.field(pvs.getClass(), "inShelf");
+            if (fs != null) fs.setBoolean(pvs, false);
+            java.lang.reflect.Field fg = Refl.field(pvs.getClass(), "gone");   // lido com as flags de "fora"
+            if (fg != null) fg.setBoolean(pvs, false);
+            float pad = StackHooks.fPadding != null ? StackHooks.fPadding.getFloat(ssa) : 0f;
+            landUp = ph + pad;
+            landMoved = true;
+            landDirty = true;
+            playerView = pv;
+            if (landLogs2++ < 2) ElasticCard.log("cortina paisagem: player embaixo do relógio (" + Math.round(s * 100) + "%), fora da lista; notificações à direita");
+        } catch (Throwable t) {
+            if (landLogs2++ < 4) ElasticCard.log("cortina paisagem: player: " + t);
+        }
+    }
+
+    /** O player movido fica fora da lista: o toque nele é entregue direto a ele. */
+    static boolean forwardLand(android.view.MotionEvent me) {
+        try {
+            int a = me.getActionMasked();
+            View pv = playerView;
+            if (a == android.view.MotionEvent.ACTION_DOWN) {
+                landFwd = false;
+                if (!landMoved || pv == null || !pv.isShown() || LandMini.showing()) return false;
+                int[] l = new int[2];
+                pv.getLocationOnScreen(l);
+                float w = pv.getWidth() * pv.getScaleX(), h = pv.getHeight() * pv.getScaleY();
+                if (me.getRawX() < l[0] || me.getRawX() > l[0] + w || me.getRawY() < l[1] || me.getRawY() > l[1] + h) return false;
+                landFwd = true;
+            }
+            if (!landFwd || pv == null) return false;
+            int[] l = new int[2];
+            pv.getLocationOnScreen(l);
+            android.view.MotionEvent c = android.view.MotionEvent.obtain(me);
+            c.setLocation((me.getRawX() - l[0]) / Math.max(0.01f, pv.getScaleX()), (me.getRawY() - l[1]) / Math.max(0.01f, pv.getScaleY()));
+            try { pv.dispatchTouchEvent(c); } finally { c.recycle(); }
+            if (a == android.view.MotionEvent.ACTION_UP || a == android.view.MotionEvent.ACTION_CANCEL) landFwd = false;
+            return true;
+        } catch (Throwable t) {
+            landFwd = false;
+            return false;
+        }
+    }
+
+    /** Cortina: o cartão que chega na lanterna/câmera vai apagando (o resto é cortado no desenho da lista). */
+    static void fadeBottom(Object ssa) {
+        try {
+            if (StackHooks.fHost == null || StackHooks.fTempState == null || StackHooks.fVisible == null) return;
+            View host = (View) StackHooks.fHost.get(ssa);
+            Object st = StackHooks.fTempState.get(ssa);
+            Object vis = st == null ? null : StackHooks.fVisible.get(st);
+            if (host == null || !(vis instanceof java.util.List)) return;
+            float lim = buttonLimit(host);
+            if (Float.isNaN(lim)) return;
+            float d = host.getResources().getDisplayMetrics().density;
+            lim += 10 * d;
+            for (Object c : (java.util.List) vis) {
+                Object vs = Refl.call(c, "getViewState");
+                if (vs == null) continue;
+                float y = vsF(vs, "mYTranslation");
+                int h = Refl.field(vs.getClass(), "height").getInt(vs);
+                if (h <= 0 || y + h <= lim) continue;
+                float o = y + h - lim;
+                float k = StackMath.clamp(1f - o / (h * 0.55f), 0f, 1f);
+                float a = Refl.field(vs.getClass(), "mAlpha").getFloat(vs);
+                GroupStack.call(vs, "setAlpha", a * k);
+                if (k <= 0f) {
+                    java.lang.reflect.Field fh = Refl.field(vs.getClass(), "hidden");
+                    if (fh != null) fh.setBoolean(vs, true);
+                }
+            }
+        } catch (Throwable t) {
+            if (fadeLogs++ < 4) ElasticCard.log("cortina: apagar no fim: " + t);
+        }
+    }
+
     /** Topo dos botões de baixo da cortina (com folga), nas coordenadas da lista; NaN sem botões. */
     static float buttonLimit(View host) {
         try {
             SheetDeco dv = decoV;
+            if (landNow) return Float.NaN;   // paisagem: os botões ficam fora da coluna das notificações
             if (dv == null || dv.btnY <= 0 || dv.getParent() == null || host == null) return Float.NaN;
             float d = host.getResources().getDisplayMetrics().density;
             int[] hl = new int[2], dl = new int[2];
@@ -1002,6 +1546,184 @@ final class ShadeSheet {
     static float swX;
     static int swLogs2;
 
+    static boolean huPull, passed;
+    static int huState;   // 0 nada, 1 dedo na heads-up (o sistema ainda recebe), 2 a cortina está descendo
+    static float huX0, huY0;
+    static android.view.VelocityTracker huVt;
+
+    /**
+     * Puxar a cortina começando em cima de uma heads-up (só a cortina do iOS). Independente do resto
+     * dos gestos: o dedo desce na heads-up, o sistema continua recebendo até ficar claro que é um
+     * puxar para baixo; aí o sistema ganha um "cancelar", a cortina abre escondida no alto e segue o
+     * dedo; ao soltar, abre ou volta como no puxar pela barra de status.
+     */
+    static boolean huGesture(XC_MethodHook.MethodHookParam p, android.view.MotionEvent me) {
+        View root = (View) p.thisObject;
+        View v = panel == null ? null : panel.get();
+        int a = me.getActionMasked();
+        float d = root.getResources().getDisplayMetrics().density;
+        if (a == android.view.MotionEvent.ACTION_DOWN) {
+            huState = 0;
+            if (v != null && !on && !dragging && !transfer && !animating && Prefs.shadeSheet && !locked(v) && hunHit(root, me.getRawY())) {
+                huState = 1;
+                huX0 = me.getRawX();
+                huY0 = me.getRawY();
+                if (huVt == null) huVt = android.view.VelocityTracker.obtain();
+                huVt.clear();
+                huVt.addMovement(me);
+            }
+            return false;
+        }
+        if (huState == 0 || v == null) return false;
+        huVt.addMovement(me);
+        float dy = me.getRawY() - huY0, dx = me.getRawX() - huX0;
+        if (huState == 1) {
+            if (a == android.view.MotionEvent.ACTION_UP || a == android.view.MotionEvent.ACTION_CANCEL) { huState = 0; return false; }
+            if (a != android.view.MotionEvent.ACTION_MOVE) return false;
+            if (dy < 8 * d || dy < Math.abs(dx) * 1.2f) {
+                if (dy < -8 * d || Math.abs(dx) > 16 * d) huState = 0;   // para cima ou para o lado: é da heads-up
+                return false;
+            }
+            huState = 2;
+            dragging = true;
+            closing = false;
+            candidate = false;
+            begin(v);
+            lastOurTouch = android.os.SystemClock.uptimeMillis();
+            android.view.MotionEvent c = android.view.MotionEvent.obtain(me);
+            c.setAction(android.view.MotionEvent.ACTION_CANCEL);
+            p.args[0] = c;   // o sistema larga a heads-up
+            if (huLogs++ < 6) ElasticCard.log("cortina: puxada por cima da heads-up");
+            return true;
+        }
+        // huState == 2: a cortina segue o dedo
+        lastOurTouch = android.os.SystemClock.uptimeMillis();
+        float h = v.getHeight() > 0 ? v.getHeight() : v.getResources().getDisplayMetrics().heightPixels;
+        if (a == android.view.MotionEvent.ACTION_MOVE) {
+            v.setTranslationY(Math.min(0f, -h + 24f * d + Math.max(0f, dy) * 1.1f + huY0));
+        } else if (a == android.view.MotionEvent.ACTION_UP || a == android.view.MotionEvent.ACTION_CANCEL) {
+            huState = 0;
+            dragging = false;
+            huVt.computeCurrentVelocity(1000);
+            float vy = huVt.getYVelocity();
+            boolean open = a == android.view.MotionEvent.ACTION_UP && (vy > 800f || (vy > -800f && h + v.getTranslationY() > h * 0.35f));
+            settle(v, open, vy);
+        }
+        p.setResult(Boolean.TRUE);
+        return true;
+    }
+    static int huLogs;
+
+    /** O dedo desceu em cima (ou logo acima) de uma heads-up fixada no topo. */
+    static Object hum;   // HeadsUpManagerImpl (HyperOS 4)
+
+    static boolean hunHit(View root, float y) {
+        try {
+            float d0 = root.getResources().getDisplayMetrics().density;
+            if (hum != null) {
+                // a heads-up que está no topo, pelo próprio gerenciador do sistema (funciona com grupos)
+                Object e = Refl.call(hum, "getTopEntry");
+                if (e == null) return false;
+                Object r = Refl.get(e, "row");
+                if (r == null) r = Refl.call(e, "getRow");
+                boolean hit = true;
+                if (r instanceof View && ((View) r).isShown()) {
+                    int[] a = new int[2];
+                    ((View) r).getLocationOnScreen(a);
+                    int h = ((View) r).getHeight();
+                    Object ah = Refl.call(r, "getActualHeight");
+                    if (ah instanceof Integer && (Integer) ah > 0) h = (Integer) ah;
+                    hit = y <= a[1] + h + 16 * d0;
+                } else hit = y <= 160 * d0;
+                if (huLogs < 6) { huLogs++; ElasticCard.log("cortina: toque com heads-up na tela (y=" + Math.round(y) + ", em cima dela=" + hit + ")"); }
+                return hit;
+            }
+            View ns = nssl != null ? nssl : findCls(root, "NotificationStackScrollLayout", 0);
+            if (!(ns instanceof ViewGroup)) return false;
+            if (nssl == null) nssl = ns;
+            ViewGroup g = (ViewGroup) ns;
+            float d = root.getResources().getDisplayMetrics().density;
+            int[] a = new int[2];
+            for (int i = 0; i < g.getChildCount(); i++) {
+                View c = g.getChildAt(i);
+                if (c.getVisibility() != View.VISIBLE || !Boolean.TRUE.equals(Refl.call(c, "isPinned"))) continue;
+                c.getLocationOnScreen(a);
+                int h = c.getHeight();
+                Object ah = Refl.call(c, "getActualHeight");
+                if (ah instanceof Integer && (Integer) ah > 0) h = (Integer) ah;
+                if (y <= a[1] + h + 16 * d) return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
+    static boolean sideFired, sideOk;
+    static int sideLogs;
+
+    /**
+     * HyperOS 4: deslizar para o lado na cortina leva ao centro de controle. Se o HyperOS não começar a
+     * troca sozinho (a cortina não é o painel dele), a troca é pedida aqui, como o botão do cabeçalho faz.
+     */
+    static void sideSwipe(View v, android.view.MotionEvent e, float d) {
+        if (!sideOk || sideFired || dragging || candidate && closing && Math.abs(e.getRawY() - downY) > 10 * d) return;
+        float dx = e.getRawX() - downX, dy = e.getRawY() - downY;
+        boolean rtl = v.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+        if (Math.abs(dx) < 56 * d || Math.abs(dx) < Math.abs(dy) * 2f) return;   // para qualquer lado: o único vizinho é o centro de controle
+        // um cartão sendo arrastado para o lado (dispensar): o gesto é dele
+        if (cardSwiping(d)) { sideFired = true; return; }
+        sideFired = true;
+        if (swBool("getSwitching")) return;   // o HyperOS já está trocando com o dedo
+        boolean can = swBool("isSwitchable");
+        if (sideLogs++ < 6) ElasticCard.log("cortina: deslizar para o centro de controle (troca do sistema " + (can ? "liberada" : "bloqueada") + ")");
+        try {
+            swCtl.getClass().getMethod("switchToControlCenter").invoke(swCtl);
+        } catch (Throwable t) {
+            if (sideLogs++ < 6) ElasticCard.log("cortina: troca para o centro de controle falhou: " + t);
+        }
+    }
+
+    static boolean cardSwiping(float d) {
+        try {
+            if (!(nssl instanceof ViewGroup)) return false;
+            ViewGroup g = (ViewGroup) nssl;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                View c = g.getChildAt(i);
+                if (Math.abs(c.getTranslationX()) > 4 * d) return true;
+                Object kids = Refl.call(c, "getAttachedChildren");
+                if (kids instanceof java.util.List) for (Object k : (java.util.List) kids)
+                    if (k instanceof View && Math.abs(((View) k).getTranslationX()) > 4 * d) return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
+    /** O dedo começou em cima de um cartão de notificação (deslizar ali é para dispensar o cartão). */
+    static boolean overCard(float x, float y) {
+        try {
+            if (!(nssl instanceof ViewGroup) || !nssl.isShown()) return false;
+            ViewGroup g = (ViewGroup) nssl;
+            int[] a = new int[2];
+            for (int i = 0; i < g.getChildCount(); i++) {
+                View c = g.getChildAt(i);
+                // só cartões de verdade (não rodapé, prateleira, cabeçalhos), pela parte que aparece
+                if (!c.getClass().getName().endsWith("ExpandableNotificationRow")) continue;
+                if (c.getVisibility() != View.VISIBLE || c.getAlpha() < 0.05f || c.getHeight() <= 0) continue;
+                c.getLocationOnScreen(a);
+                int h = c.getHeight();
+                Object ah = Refl.call(c, "getActualHeight");
+                if (ah instanceof Integer && (Integer) ah > 0) h = (Integer) ah;
+                Object ct = Refl.call(c, "getClipTopAmount"), cb = Refl.call(c, "getClipBottomAmount");
+                int top = a[1] + (ct instanceof Integer ? (Integer) ct : 0);
+                int bot = a[1] + h - (cb instanceof Integer ? (Integer) cb : 0);
+                if (x >= a[0] && x <= a[0] + c.getWidth() && y >= top && y <= bot) return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
     static boolean swBool(String m) {
         try { return Boolean.TRUE.equals(swCtl.getClass().getMethod(m).invoke(swCtl)); } catch (Throwable t) { return false; }
     }
@@ -1016,6 +1738,13 @@ final class ShadeSheet {
      */
     static void hookSwitch(ClassLoader cl) throws Throwable {
         Class sw = Class.forName("com.miui.systemui.shade.ShadeSwitchControllerImpl", false, cl);
+        for (java.lang.reflect.Constructor k : sw.getDeclaredConstructors()) {
+            XposedBridge.hookMethod(k, new XC_MethodHook() {
+                protected void afterHookedMethod(MethodHookParam p) {
+                    swCtl = p.thisObject;
+                }
+            });
+        }
         XposedBridge.hookMethod(sw.getDeclaredMethod("isSwitchable"), new XC_MethodHook() {
             protected void beforeHookedMethod(MethodHookParam p) {
                 swCtl = p.thisObject;
@@ -1143,14 +1872,25 @@ final class ShadeSheet {
                 float d = v.getResources().getDisplayMetrics().density;
                 if (nsslOrig == null) nsslOrig = new int[]{lp.topMargin, lp.bottomMargin, lp.leftMargin, lp.rightMargin, lp.width};
                 boolean land = v.getWidth() > v.getHeight();
+                if (land != landNow) { landNow = land; requestStack(); }
                 int t, b, l, r, wd;
                 if (land) {
                     // paisagem: a lista vai para a coluna da direita, entre o relógio e a câmera
                     t = nsslOrig[0] + Math.round(48 * d);
                     b = nsslOrig[1] + Math.round(16 * d);
+                    // a lista desce até a linha de baixo da câmera (os botões ficam ao lado, fora da coluna)
+                    if (decoV != null && decoV.btnY > 0 && nssl.getParent() instanceof View) {
+                        View par = (View) nssl.getParent();
+                        int[] pl = new int[2], dl = new int[2];
+                        par.getLocationInWindow(pl);
+                        decoV.getLocationInWindow(dl);
+                        b = Math.max(0, Math.round(pl[1] + par.getHeight() - (dl[1] + decoV.btnY + 28 * d)));
+                    }
                     l = Math.round(v.getWidth() * LAND_SPLIT);
                     r = Math.round(LAND_RIGHT * d);
                     wd = v.getWidth() - l - r;
+                    // a descida dos cartões é do relógio do retrato: em paisagem não existe
+                    if (listExtra != 0) { listExtra = 0; requestStack(); }
                 } else {
                     t = nsslOrig[0] + Math.round(CurtainClock.listOffset(d) + 48 * d);
                     if (true) {
@@ -1161,6 +1901,8 @@ final class ShadeSheet {
                         t = nsslOrig[0];
                     } else if (listExtra != 0) { listExtra = 0; requestStack(); }
                     b = nsslOrig[1] + Math.round(104 * d);
+                    // (o fim acima da lanterna/câmera fica na pilha e no corte do desenho: encurtar a lista
+                    // tirava o toque dos cartões de baixo, que a cortina desce para fora dela)
                     l = nsslOrig[2];
                     r = nsslOrig[3];
                     wd = nsslOrig[4];
@@ -1229,11 +1971,53 @@ final class ShadeSheet {
         }
     }
 
+    static View bottomBand;
+    static int bbTop = Integer.MIN_VALUE, bbLogs;
+
+    /**
+     * Desfoque de baixo em degradê, como o do cabeçalho do HyperOS: os cartões vão desfocando aos
+     * poucos ao chegar perto da lanterna e da câmera, em vez de sumir numa linha.
+     */
+    static float bottomCutWin = Float.NaN;
+
+    /** O degradê do cabeçalho do HyperOS ganha um segundo trecho embaixo: do nítido ao desfocado até o corte. */
+    static float[] withBottom(View v, float[] b) {
+        if (!on || Float.isNaN(bottomCutWin) || b.length != 6) return b;
+        int[] l = new int[2];
+        v.getLocationInWindow(l);
+        float d = v.getResources().getDisplayMetrics().density;
+        float cut = bottomCutWin - l[1], fade = 110 * d;
+        if (cut - fade <= b[4]) return b;
+        float st = b[2] > 0 ? b[2] : 2.3f;
+        return new float[]{b[0], b[1], b[2], b[3], b[4], b[5], 0f, cut - fade, 0f, 0f, cut, st};
+    }
+
+    static void bottomBlur(View deco) {
+        try {
+            View host = nssl;
+            float lim = host == null || !on ? Float.NaN : buttonLimit(host);
+            float cut = Float.NaN;
+            if (!Float.isNaN(lim)) {
+                int[] hl = new int[2];
+                host.getLocationInWindow(hl);
+                cut = hl[1] + lim + 10 * deco.getResources().getDisplayMetrics().density;
+            }
+            boolean changed = Float.isNaN(cut) != Float.isNaN(bottomCutWin) || (!Float.isNaN(cut) && Math.abs(cut - bottomCutWin) > 2);
+            if (!changed) return;
+            bottomCutWin = cut;
+            gradShift.clear();   // reaplica o degradê com o trecho de baixo
+            shiftGradients(shiftNow);
+            if (bbLogs++ < 3) ElasticCard.log("cortina: desfoque de baixo no degradê do HyperOS (corte em " + Math.round(cut) + ", " + gradOrig.size() + " fundo(s))");
+        } catch (Throwable t) {
+            if (bbLogs++ < 4) ElasticCard.log("cortina: desfoque de baixo: " + t);
+        }
+    }
+
     static View blurL, blurR;
     static boolean blurBroken;
 
     /** Círculos de vidro desfocado atrás da lanterna e da câmera (mesmo desfoque dos botões do bloqueio). */
-    static void buttonBlur(View deco, float lx, float rx, float cy, float r) {
+    static void buttonBlur(View deco, float lx, float rx, float cyL, float cy, float r) {
         if (blurBroken || !(deco.getParent() instanceof ViewGroup)) return;
         try {
             ViewGroup root = (ViewGroup) deco.getParent();
@@ -1256,7 +2040,7 @@ final class ShadeSheet {
             }
             int dt = Math.round(deco.getTop() + deco.getTranslationY());
             blurL.setTranslationX(lx - r + deco.getTranslationX());
-            blurL.setTranslationY(dt + cy - r);
+            blurL.setTranslationY(dt + cyL - r);
             blurR.setTranslationX(rx - r + deco.getTranslationX());
             blurR.setTranslationY(dt + cy - r);
         } catch (Throwable t) {
@@ -1305,7 +2089,7 @@ final class ShadeSheet {
                         float[] b = a.clone();
                         b[1] += s;
                         b[4] += s;
-                        p.args[0] = b;
+                        p.args[0] = withBottom(v, b);
                         gradShift.put(v, Integer.valueOf(s));
                     }
                 }
@@ -1328,6 +2112,7 @@ final class ShadeSheet {
             float[] b = e.getValue().clone();
             b[1] += s;
             b[4] += s;
+            b = withBottom(v, b);
             // o degradê só aparece dentro da própria view: se ela for mais baixa que o fim do degradê,
             // o desfoque termina numa linha reta. A view cresce até o fim do degradê (e volta depois).
             try {
@@ -1335,8 +2120,10 @@ final class ShadeSheet {
                 if (lp != null) {
                     if (!gradH.containsKey(v)) gradH.put(v, Integer.valueOf(lp.height));
                     int oh = gradH.get(v).intValue();
-                    int need = s == 0 ? oh : Math.max(v.getHeight(), Math.round(Math.max(b[1], b[4])) + 2);
-                    if (s == 0 || need > v.getHeight()) {
+                    float maxY = 0;
+                    for (int k = 1; k < b.length; k += 3) maxY = Math.max(maxY, b[k]);
+                    int need = s == 0 && b.length <= 6 ? oh : Math.max(v.getHeight(), Math.round(maxY) + 2);
+                    if ((s == 0 && b.length <= 6) || need > v.getHeight()) {
                         if (lp.height != need) { lp.height = need; v.setLayoutParams(lp); }
                     }
                     if (gradLogs++ < 6) ElasticCard.log("cortina: degradê " + v.getClass().getSimpleName() + " h=" + v.getHeight() + " fim=" + Math.max(b[1], b[4]) + " -> " + need);
@@ -1399,6 +2186,12 @@ final class ShadeSheet {
 
     static void off(View v) {
         on = false;
+        if (bottomBand != null) bottomBand.setVisibility(View.GONE);
+        if (!Float.isNaN(bottomCutWin)) {
+            bottomCutWin = Float.NaN;
+            gradShift.clear();
+            try { shiftGradients(0); } catch (Throwable ignored) {}
+        }
         switchingNow = false;
         follow(v, 0f, 1f);
         layoutList(v, false);
@@ -1433,6 +2226,7 @@ final class ShadeSheet {
             public boolean onPreDraw() {
                 try {
                     if (!on && Prefs.shadeSheet && locked(v) && (Kg.snapL == null || android.os.SystemClock.uptimeMillis() - Kg.snapAt > 30000)) Kg.snapBottom(v);   // copia os botões do bloqueio
+                    Kg.fadeGlass(v);   // o vidro do relógio/título não segue o painel: some junto com ele
                     if (on) {
                         layoutList(v, true);
                         if (decoV != null) {   // relógio e título acompanham cada quadro da rolagem (inclusive a volta ao topo)

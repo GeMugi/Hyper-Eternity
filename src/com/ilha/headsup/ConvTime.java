@@ -79,6 +79,7 @@ final class ConvTime {
 
     static void install(ClassLoader cl) {
         hookDateTime();
+        guardGrouping(cl);
         int ok = 0;
         ok += hookWrapper(cl, "com.android.systemui.statusbar.notification.row.wrapper.MiuiNotificationConversationTemplateViewWrapper", true);
         ok += hookWrapper(cl, "com.android.systemui.statusbar.notification.row.wrapper.NotificationConversationTemplateViewWrapper", false);
@@ -307,6 +308,47 @@ final class ConvTime {
 
     // ------------------------------------------------------------------ posicionar (a cada layout)
 
+    static int guardLogs;
+
+    /**
+     * A hora da conversa sai da linha do topo (vai para o canto). Ao tirar um cartão de um grupo, o
+     * HyperOS 4 procura a hora na linha do topo e, sem achar, derrubava a Interface do Sistema.
+     * Sem a hora ali, essa arrumação da linha do topo (só visual) é pulada.
+     */
+    static void guardGrouping(ClassLoader cl) {
+        try {
+            Class gu = Class.forName("com.android.systemui.statusbar.NotificationGroupingUtil", false, cl);
+            final int tid = android.content.res.Resources.getSystem().getIdentifier("time", "id", "android");
+            int n = 0;
+            for (java.lang.reflect.Method m : gu.getDeclaredMethods()) {
+                if (!m.getName().equals("sanitizeTopLine")) continue;
+                com.ilha.headsup.xp.XposedBridge.hookMethod(m, new com.ilha.headsup.xp.XC_MethodHook() {
+                    protected void beforeHookedMethod(MethodHookParam p) {
+                        try {
+                            Object g = p.args.length > 0 ? p.args[0] : null;
+                            if (g instanceof ViewGroup && tid != 0 && ((ViewGroup) g).findViewById(tid) == null) {
+                                p.setResult(null);
+                                if (guardLogs++ < 3) ElasticCard.log("conversas: linha do topo sem a hora (está no canto), arrumação pulada");
+                            }
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                });
+                n++;
+            }
+            ElasticCard.log("conversas: proteção da linha do topo (" + n + ")");
+        } catch (Throwable t) {
+            ElasticCard.log("conversas: proteção da linha do topo indisponível: " + t);
+        }
+    }
+
+    /** A seta está de fato à vista? (no HyperOS 4 a heads-up "sem botões" deixa a seta transparente) */
+    static boolean seen(View v, View root) {
+        for (View c = v; c != null && c != root; c = c.getParent() instanceof View ? (View) c.getParent() : null)
+            if (c.getAlpha() < 0.05f) return false;
+        return true;
+    }
+
     static void place(State st) {
         ViewGroup root = st.root;
         if (st.hideOn) hideBox(st);
@@ -337,7 +379,7 @@ final class ConvTime {
         float shift = 0;
         // com a seta à mostra: ela desce para baixo da hora (modelo do HyperOS) ou a hora fica à esquerda dela
         View icon = st.icon;
-        if (!st.hideOn && icon != null && icon.getVisibility() == View.VISIBLE && icon.getWidth() > 0
+        if (!st.hideOn && icon != null && icon.getVisibility() == View.VISIBLE && icon.getWidth() > 0 && seen(icon, root)
                 && (st.box == null || st.box.getVisibility() == View.VISIBLE) && relTop(icon, root) != Integer.MIN_VALUE) {
             int cl = relLeft(icon, root), ct = relTop(icon, root);
             int cb = ct + icon.getHeight();

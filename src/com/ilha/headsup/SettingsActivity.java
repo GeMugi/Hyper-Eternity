@@ -292,10 +292,10 @@ public class SettingsActivity extends Activity {
         boolean ok = RemoteSync.synced();
         boolean waited = android.os.SystemClock.uptimeMillis() - openedAt > 2500L;
         if (ok) {
-            status.setText("● Ligado ao LSPosed · os ajustes valem na hora");
+            status.setText(Tr.t("● Ligado ao LSPosed · os ajustes valem na hora"));
             status.setTextColor(cAccent);
         } else if (RemoteSync.connected()) {
-            status.setText("● Ligado ao LSPosed · sincronizando…");
+            status.setText(Tr.t("● Ligado ao LSPosed · sincronizando…"));
             status.setTextColor(cSub);
         } else {
             status.setText(waited ? "● Sem ligação com o LSPosed" : "● Procurando o LSPosed…");
@@ -631,10 +631,10 @@ public class SettingsActivity extends Activity {
         tab = p;
         ui.edit().putInt("aba", p).apply();
         boolean root = p < 0;
-        String name = root ? NAVS[nav] : PAGES[p];
+        String name = Tr.t(root ? NAVS[nav] : PAGES[p]);
         bigTitle.setText(name);
         if (pageTitle != null) pageTitle.setText(name);
-        back.setText("‹  Recursos");
+        back.setText("‹  " + Tr.t("Recursos"));
         privSub = 0;
         back.setVisibility(root ? View.GONE : View.VISIBLE);
         header.setVisibility(root && nav == 0 ? View.VISIBLE : View.GONE);
@@ -691,7 +691,7 @@ public class SettingsActivity extends Activity {
                 n = 0;
                 boolean dev = !ui.getBoolean("dev", false);
                 ui.edit().putBoolean("dev", dev).apply();
-                android.widget.Toast.makeText(SettingsActivity.this, dev ? "Recursos em teste visíveis" : "Recursos em teste ocultos", android.widget.Toast.LENGTH_SHORT).show();
+                android.widget.Toast.makeText(SettingsActivity.this, Tr.t(dev ? "Recursos em teste visíveis" : "Recursos em teste ocultos"), android.widget.Toast.LENGTH_SHORT).show();
                 recreate();
             }
         });
@@ -760,18 +760,18 @@ public class SettingsActivity extends Activity {
         if (active) {
             bg = night ? 0xFF1B3324 : 0xFFE2F4E7;
             ic = night ? 0xFF3FBF6A : 0xFF2EA65A;
-            stTitle.setText("Módulo ativo");
-            stSub.setText("Versão " + Keys.VERSION + " · os ajustes valem na hora");
+            stTitle.setText(Tr.t("Módulo ativo"));
+            stSub.setText(Tr.t("Versão") + " " + Keys.VERSION + " · " + Tr.t("os ajustes valem na hora"));
         } else if (!waited) {
             bg = cCard;
             ic = cSub;
-            stTitle.setText("Procurando o LSPosed…");
-            stSub.setText("Versão " + Keys.VERSION);
+            stTitle.setText(Tr.t("Procurando o LSPosed…"));
+            stSub.setText(Tr.t("Versão") + " " + Keys.VERSION);
         } else {
             bg = night ? 0xFF3A1F1F : 0xFFFBE6E4;
             ic = night ? 0xFFE0434F : 0xFFD8323F;
-            stTitle.setText("Módulo não ativo");
-            stSub.setText("Ative no LSPosed e reinicie a Interface do Sistema");
+            stTitle.setText(Tr.t("Módulo não ativo"));
+            stSub.setText(Tr.t("Ative no LSPosed e reinicie a Interface do Sistema"));
         }
         if (statusFrame != null) statusFrame.setBackground(round(bg, 20));
         stIcon.color = ic;
@@ -1515,9 +1515,9 @@ public class SettingsActivity extends Activity {
     }
 
     private void subPage(String title) {
-        bigTitle.setText(title);
-        if (pageTitle != null) pageTitle.setText(title);
-        back.setText("‹  Privacidade");
+        bigTitle.setText(Tr.t(title));
+        if (pageTitle != null) pageTitle.setText(Tr.t(title));
+        back.setText("‹  " + Tr.t("Privacidade"));
         back.setVisibility(View.VISIBLE);
         content.removeAllViews();
         if (scrollView != null) scrollView.scrollTo(0, 0);
@@ -1755,7 +1755,7 @@ public class SettingsActivity extends Activity {
 
         // O que a heads-up mostra
         LinearLayout hc = section(page, "Conteúdo da heads-up");
-        toggle(hc, "Sem botões", "Recolhida, mostra só título e texto. Os botões aparecem ao expandir. Ligações e alarmes mantêm os botões.", Keys.HU_NO_ACTIONS, Keys.D_HU_NO_ACTIONS);
+        toggle(hc, "Sem botões", "Recolhida, mostra só título e texto. Os botões aparecem ao expandir. Ligações e alarmes mantêm os botões. No HyperOS 4, a seta de expandir e a barrinha de janela flutuante ficam invisíveis, mas continuam funcionando.", Keys.HU_NO_ACTIONS, Keys.D_HU_NO_ACTIONS);
         toggle(hc, "Uma por notificação", "Mostra só a notificação nova, sem juntar com as anteriores do app.", Keys.HU_SEPARATE, Keys.D_HU_SEPARATE);
 
     }
@@ -1784,6 +1784,7 @@ public class SettingsActivity extends Activity {
         toggle(st, "Empilhar notificações", "As que passam do limite encolhem embaixo, como no HyperOS 4.", Keys.ST_ENABLED, Keys.D_ST_ENABLED);
         slider(st, "Limite acima do fim da tela", "Maior começa a pilha mais alto.", Keys.ST_OFFSET, Keys.D_ST_OFFSET, 0, 400, " dp");
         toggle(st, "Grupos expandidos por cartão", "Cada notificação de um grupo aberto empilha separada.", Keys.ST_GROUPS, Keys.D_ST_GROUPS);
+        toggle(st, "Player ao lado em paisagem", "Na gaveta em paisagem, com música e notificações, o player fica numa coluna à esquerda e as notificações à direita.", Keys.LAND_SPLIT, Keys.D_LAND_SPLIT);
         toggle(st, "Grupos em pilha (teste)", "Notificações do mesmo app viram uma pilha de cartões. Toque para abrir; a seta empilha de novo. Apps sem grupo próprio (Instagram, Telegram) também empilham com \"Framework do sistema\" no escopo.", Keys.GROUP_STACK, Keys.D_GROUP_STACK);
         slider(st, "Pilha: velocidade", "Mais alto é mais rápido.", Keys.GS_SPEED, Keys.D_GS_SPEED, 50, 200, "%");
         slider(st, "Pilha: bounce", "0% sem pulo; 300% pula bem mais.", Keys.GS_BOUNCE, Keys.D_GS_BOUNCE, 0, 300, "%");
@@ -1806,6 +1807,22 @@ public class SettingsActivity extends Activity {
         slider(kg, "Limite acima do fim da tela", "Deixe espaço para o cadeado e os atalhos de baixo.", Keys.KG_OFFSET, Keys.D_KG_OFFSET, 40, 500, " dp");
         toggle(kg, "Puxar para empilhar (teste)", "Com a lista no topo, continue rolando: as notificações se empilham até sobrar o player. Precisa de \"Empilhar no bloqueio\" e \"Rolar sem desbloquear\".", Keys.KG_HIDE, Keys.D_KG_HIDE);
         kg.addView(note("Vale na próxima vez que a tela bloquear."));
+        LinearLayout lw = section(page, "Widgets do bloqueio");
+        toggle(lw, "Widgets no bloqueio", "Uma fileira de widgets no estilo iOS acima da lanterna e da câmera.", Keys.LOCK_WIDGETS, Keys.D_LOCK_WIDGETS);
+        toggle(lw, "Agenda e alarme", "Próximo evento da agenda e próximo alarme.", Keys.LW_AGENDA, true);
+        toggle(lw, "Bateria", "Nível da bateria, verde carregando.", Keys.LW_BATTERY, true);
+        toggle(lw, "Clima", "Temperatura do app de clima da Xiaomi.", Keys.LW_WEATHER, true);
+        toggle(lw, "Passos", "Passos do dia (app Mi Fitness).", Keys.LW_STEPS, true);
+        divider(lw);
+        LinearLayout pr = new LinearLayout(this);
+        pr.setPadding(dp(16), dp(10), dp(16), dp(12));
+        pr.addView(button("Permitir acesso à agenda", false, new View.OnClickListener() {
+            public void onClick(View v) {
+                if (checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED) Toast.makeText(SettingsActivity.this, Tr.t("Acesso à agenda já permitido"), Toast.LENGTH_SHORT).show();
+                else requestPermissions(new String[]{Manifest.permission.READ_CALENDAR}, 11);
+            }
+        }));
+        lw.addView(pr);
 
 
     }
@@ -1825,6 +1842,7 @@ public class SettingsActivity extends Activity {
     private void buildCentral(LinearLayout page) {
         LinearLayout ios = section(page, "Cortina");
         toggle(ios, "Central em cortina (teste)", "A central desce do topo como uma cortina, com o fundo do bloqueio, relógio grande, lanterna e câmera. Desligado = central do HyperOS.", Keys.SHADE_SHEET, false);
+        toggle(ios, "Player rola com a lista", "Na cortina, o player deixa de ficar fixo abaixo do relógio e rola junto com as notificações. Use se outro módulo (como o HyperTweak) também mexer no player.", Keys.SHEET_PLAYER_FREE, Keys.D_SHEET_PLAYER_FREE);
         toggle(ios, "Cantos arredondados na cortina", "Arredonda a borda de baixo da cortina enquanto ela se move.", Keys.SHEET_ROUND, true);
         toggle(ios, "Fundo desfocado", "Usa o desfoque do HyperOS (a tela de trás desfocada). Desligado = papel de parede do bloqueio.", Keys.SHEET_BLUR, true);
         LinearLayout ck = section(page, "Relógio da cortina");
@@ -2110,6 +2128,13 @@ public class SettingsActivity extends Activity {
                 .show();
     }
 
+    private java.util.Map<String, String> capsMap;
+
+    private java.util.Map<String, String> caps() {
+        if (capsMap == null) capsMap = Caps.read(this);
+        return capsMap;
+    }
+
     private void toggle(LinearLayout card, final String label, String help, final String key, final boolean def) {
         divider(card);
         LinearLayout r = new LinearLayout(this);
@@ -2122,10 +2147,24 @@ public class SettingsActivity extends Activity {
         TextView h = text(help, 13, cSub, false);
         h.setPadding(0, dp(2), dp(8), 0);
         texts.addView(h);
+        // o que a Interface do Sistema avisou que não funciona neste aparelho: fica à vista, desativado
+        String why = caps().get(key);
+        if (why != null) {
+            boolean planned = why.startsWith("!");
+            String w = planned ? why.substring(1) : why;
+            TextView nv = text(Tr.t(planned ? "Desligada nesta versão do HyperOS" : "Indisponível neste HyperOS") + (w.isEmpty() ? "" : " (" + Tr.t(w) + ")"), 12, 0xFFE0823D, false);
+            nv.setPadding(0, dp(4), dp(8), 0);
+            texts.addView(nv);
+        }
         r.addView(texts, new LinearLayout.LayoutParams(0, -2, 1f));
         final Switch sw = new Switch(this);
         styleSwitch(sw);
         sw.setChecked(prefs.getBoolean(key, def));
+        if (why != null) {
+            sw.setEnabled(false);
+            r.setEnabled(false);
+            texts.setAlpha(0.6f);
+        }
         r.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 sw.toggle();
@@ -2155,7 +2194,7 @@ public class SettingsActivity extends Activity {
         final String[] names = {"OriginOS", "iOS"};
         final String[] helps = {
                 "Nasce da ilha e cresce até o lugar dela, com a mola do OriginOS.",
-                "Sai do ícone do app na barra de status como uma gota e cresce com a mola. Ao sair, volta para o ícone."
+                "Surge como uma barrinha abaixo do relógio e cresce com a mola até virar o cartão. Ao sair, encolhe de volta para a barrinha."
         };
         divider(card);
         LinearLayout box = new LinearLayout(this);
@@ -2193,6 +2232,17 @@ public class SettingsActivity extends Activity {
         panels[1] = stylePanel();
         slider(panels[1], "Velocidade", "Vale para a entrada e para a saída.", Keys.HU_IOS_SPEED, Keys.D_HU_IOS_SPEED, 50, 200, "%");
         slider(panels[1], "Bounce", "Quanto o cartão passa do tamanho final ao crescer.", Keys.HU_IOS_BOUNCE, Keys.D_HU_IOS_BOUNCE, 0, 200, "%");
+        // barrinha que fica depois que a heads-up recua: prévia ao vivo + ajustes
+        toggle(panels[1], "Barrinha de notificações", "Depois que a heads-up recua, fica uma barrinha abaixo do relógio avisando que há notificações. Some ao abrir a central.", Keys.BAR_ON, Keys.D_BAR_ON);
+        barPreview = new BarPreview(this);
+        LinearLayout.LayoutParams bpl = new LinearLayout.LayoutParams(-1, dp(96));
+        bpl.setMargins(dp(16), dp(10), dp(16), dp(4));
+        panels[1].addView(barPreview, bpl);
+        slider(panels[1], "Barrinha (iOS): para o lado", "Move a barrinha para a esquerda ou para a direita, a partir do relógio.", Keys.BAR_DX, Keys.D_BAR_DX, -80, 80, " dp");
+        slider(panels[1], "Barrinha (iOS): altura na tela", "Sobe ou desce a barrinha, a partir do fim da barra de status.", Keys.BAR_DY, Keys.D_BAR_DY, -30, 60, " dp");
+        slider(panels[1], "Barrinha (iOS): largura", "Comprimento da barrinha.", Keys.BAR_W, Keys.D_BAR_W, 10, 90, " dp");
+        slider(panels[1], "Barrinha (iOS): espessura", "Altura da barrinha.", Keys.BAR_H, Keys.D_BAR_H, 2, 14, " dp");
+        slider(panels[1], "Barrinha (iOS): opacidade", "Quanto a barrinha aparece.", Keys.BAR_A, Keys.D_BAR_A, 10, 100, "%");
         for (int i = 0; i < panels.length; i++) {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
             lp.topMargin = dp(12);
@@ -2241,6 +2291,52 @@ public class SettingsActivity extends Activity {
         // o cartão (e a página) acompanham suavemente a troca de painel
         smoothResize(card);
         if (card.getParent() instanceof ViewGroup) smoothResize((ViewGroup) card.getParent());
+    }
+
+    private BarPreview barPreview;
+
+    /** Prévia da barrinha: uma barra de status de mentira (relógio) com a barrinha nos ajustes atuais. */
+    final class BarPreview extends View {
+        int dx, dy, w, h, a;
+        final android.graphics.Paint pt = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+
+        BarPreview(android.content.Context c) {
+            super(c);
+            dx = prefs.getInt(Keys.BAR_DX, Keys.D_BAR_DX);
+            dy = prefs.getInt(Keys.BAR_DY, Keys.D_BAR_DY);
+            w = prefs.getInt(Keys.BAR_W, Keys.D_BAR_W);
+            h = prefs.getInt(Keys.BAR_H, Keys.D_BAR_H);
+            a = prefs.getInt(Keys.BAR_A, Keys.D_BAR_A);
+        }
+
+        void set(String k, int v) {
+            if (k.equals(Keys.BAR_DX)) dx = v; else if (k.equals(Keys.BAR_DY)) dy = v;
+            else if (k.equals(Keys.BAR_W)) w = v; else if (k.equals(Keys.BAR_H)) h = v; else if (k.equals(Keys.BAR_A)) a = v;
+            invalidate();
+        }
+
+        protected void onDraw(android.graphics.Canvas c) {
+            float d = getResources().getDisplayMetrics().density;
+            float W = getWidth(), H = getHeight();
+            pt.setShader(new android.graphics.LinearGradient(0, 0, W, H, 0xFF3B4FA8, 0xFFB15BC9, android.graphics.Shader.TileMode.CLAMP));
+            c.drawRoundRect(0, 0, W, H, 16 * d, 16 * d, pt);
+            pt.setShader(null);
+            int sbId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+            float sb = sbId != 0 ? getResources().getDimensionPixelSize(sbId) : 28 * d;
+            pt.setColor(0xFFFFFFFF);
+            pt.setTextSize(15 * d);
+            pt.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+            String t = "18:09";
+            float tx = 20 * d, tw = pt.measureText(t);
+            c.drawText(t, tx, sb * 0.5f + 5 * d, pt);
+            pt.setAlpha(110);
+            c.drawLine(0, sb, W, sb, pt);
+            float cx = tx + tw / 2f + dx * d, cy = sb + dy * d + h * d / 2f;
+            pt.setColor(0xFFFFFFFF);
+            pt.setAlpha(Math.round(255 * a / 100f));
+            float bw = w * d, bh = h * d;
+            c.drawRoundRect(cx - bw / 2f, cy - bh / 2f, cx + bw / 2f, cy + bh / 2f, bh / 2f, bh / 2f, pt);
+        }
     }
 
     private void smoothResize(ViewGroup g) {
@@ -2317,6 +2413,7 @@ public class SettingsActivity extends Activity {
         bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             public void onProgressChanged(SeekBar s, int p, boolean user) {
                 value.setText(show(p + min, unit));
+                if (barPreview != null && key.startsWith("bar_")) barPreview.set(key, p + min);
                 reset.setVisibility(p + min != def ? View.VISIBLE : View.GONE);
             }
 

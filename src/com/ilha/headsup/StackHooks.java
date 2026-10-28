@@ -698,6 +698,13 @@ final class StackHooks {
             float h = fHeight.getInt(mvs);
             float want = screenBottom - MEDIA_BOTTOM_DP * d - loc[1] - h;   // topo do cartão, em coordenadas da lista
             float y = fY.getFloat(mvs);
+            // widgets do bloqueio: o player fica acima deles (sobe se precisar)
+            float lw = LockWidgets.topIn(host);
+            if (!Float.isNaN(lw)) {
+                float lim = lw - 12 * d - h;
+                want = Math.min(want, lim);
+                if (y > lim + 0.5f) { VS.inv(mSetY, mvs, lim); y = lim; }
+            }
             if (want > y + 0.5f) {
                 VS.inv(mSetY, mvs, want);
                 if (mediaLogs++ < 4) ElasticCard.log("player da música embaixo: topo " + (int) (want + loc[1]) + "px na tela (antes " + (int) (y + loc[1]) + "px), altura " + (int) h + "px");
@@ -752,14 +759,17 @@ final class StackHooks {
             float E;
             if (keyguard) {
                 E = host.getHeight() - Prefs.kgOffset * d;
+                float lw = LockWidgets.topIn(host);   // widgets do bloqueio: a lista para acima deles
+                if (!Float.isNaN(lw)) E = Math.min(E, lw - 8 * d);
                 fixKeyguard(host);
             } else if (ShadeSheet.active()) {
                 // cortina: a altura que o HyperOS informa é a da central dele (bem menor), e a cortina
                 // ainda desce os cartões depois. O limite é o fim da tela, descontada essa descida.
-                E = host.getHeight() - Prefs.stOffset * d - ShadeSheet.shift();
+                // a ordem dos ganchos muda entre sistemas: só desconta a descida se ela ainda não foi feita
+                E = host.getHeight() - Prefs.stOffset * d - ShadeSheet.pendingShift();
                 // nunca por cima da lanterna/câmera da cortina (a posição deles vem do bloqueio)
                 float lim = ShadeSheet.buttonLimit(host);
-                if (!Float.isNaN(lim)) E = Math.min(E, lim - Prefs.stOffset * d - ShadeSheet.shift());
+                if (!Float.isNaN(lim)) E = lim - Prefs.stOffset * d - ShadeSheet.pendingShift();   // fim = logo acima dos botões
             } else {
                 E = fTopPadding.getInt(amb) + ((Integer) mInnerHeight.invoke(amb, Boolean.FALSE)).intValue()
                         - Prefs.stOffset * d;

@@ -75,12 +75,12 @@ public final class XposedBridge {
         XposedInterface a = api;
         if (a != null) {
             try {
-                a.log(Log.INFO, "HeadsUpIlha", msg);
+                a.log(Log.WARN, "HeadsUpIlha", msg);
                 return;
             } catch (Throwable ignored) {
             }
         }
-        Log.i("HeadsUpIlha", msg);
+        Log.w("HeadsUpIlha", msg);
     }
 
     /** Ajustes guardados pelo LSPosed (escritos pelo app, lidos aqui na Interface do Sistema). */

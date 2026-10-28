@@ -82,6 +82,7 @@ final class EdgeBlur {
             }
         } catch (Throwable t) {
             ElasticCard.log("título da música: player do HyperOS indisponível " + t);
+            Caps.fail(Keys.MEDIA_EDGE, t);
         }
         ElasticCard.log("título da música com as pontas desfocadas: " + (ok > 0 ? "instalado" : "não encontrei o player"));
     }

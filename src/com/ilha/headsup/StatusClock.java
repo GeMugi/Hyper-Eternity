@@ -104,6 +104,19 @@ final class StatusClock {
     }
 
     /** Ponto abaixo do relógio visível na barra de status (x central, y da base), ou null. */
+    /** O relógio mais à esquerda que está à vista na barra de status. */
+    static View leftClock() {
+        View best = null;
+        int bestX = Integer.MAX_VALUE;
+        for (View v : new ArrayList<View>(clocks.keySet())) {
+            if (!v.isShown() || v.getWidth() <= 0 || v.getAlpha() < 0.05f) continue;
+            v.getLocationOnScreen(tmp);
+            if (tmp[1] > v.getHeight() * 3) continue;
+            if (tmp[0] < bestX) { bestX = tmp[0]; best = v; }
+        }
+        return best;
+    }
+
     static float[] anchor(int statusBar) {
         try {
             if (clocks.isEmpty()) return null;

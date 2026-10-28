@@ -76,6 +76,7 @@ final class KeepLock {
             ElasticCard.log("manter notificações no bloqueio: instalado");
         } catch (Throwable t) {
             ElasticCard.log("manter notificações no bloqueio indisponível: " + t);
+            Caps.fail(Keys.KG_KEEP, t);
         }
     }
 }

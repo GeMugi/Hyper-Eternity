@@ -80,6 +80,7 @@ final class SheetDeco extends View {
         float ht = land ? Math.min(110 * d, h * 0.28f) : Math.max(56 * d, Math.min(96 * d, (bot - top) * 0.62f));
         float ctop = land ? h * 0.30f - ht * 0.6f : top;
         float ccx = land ? colL / 2f : w / 2f;
+        if (land) landClockBot = ctop + 30 * d + ht * 0.78f + 6 * d;   // fim do relógio (paisagem): o player vem embaixo
         time.setTextSize(ht);
         Kg.styleClock(time, date, getRootView());
         if (lc >= 0) Kg.removeGlass();
@@ -102,11 +103,17 @@ final class SheetDeco extends View {
             if (Kg.snapL != null) { lx = Kg.rectL.centerX() - bx; cy = Kg.rectL.centerY() - by; }
             if (Kg.snapR != null) rx = Kg.rectR.centerX() - bx;
         }
-        btnL = lx; btnR = rx; btnY = cy;
-        ShadeSheet.buttonBlur(this, lx, rx, cy, r * 1.12f);
+        float cyL = cy;
+        if (land) {   // paisagem: lanterna em cima da câmera, à direita; a coluna do relógio fica livre para o player
+            lx = rx;
+            cyL = cy - (2 * r * 1.12f + 16 * d);
+        }
+        btnL = lx; btnR = rx; btnY = cy; btnYL = cyL;
+        ShadeSheet.buttonBlur(this, lx, rx, cyL, cy, r * 1.12f);
+        ShadeSheet.bottomBlur(this);
         // fundo de vidro claro sempre (como o "x" do cabeçalho); aceso/pressionado fica mais claro
         btn.setColor(torch ? 0xF2FFFFFF : (pressed == 0 ? 0x4DFFFFFF : 0x2EFFFFFF));
-        c.drawCircle(lx, cy, r * 1.12f, btn);
+        c.drawCircle(lx, cyL, r * 1.12f, btn);
         btn.setColor(pressed == 1 ? 0x4DFFFFFF : 0x2EFFFFFF);
         c.drawCircle(rx, cy, r * 1.12f, btn);
         // ícones com a mesma vibrance do player: cada ícone vira cinza e é misturado (soma luz/multiplica)
@@ -122,8 +129,8 @@ final class SheetDeco extends View {
         if (!aff && Kg.snapL != null && Kg.snapR != null) {
             Paint bp = new Paint(Paint.FILTER_BITMAP_FLAG);
             bp.setColorFilter(new android.graphics.PorterDuffColorFilter(torch ? 0xFF222222 : vcol, android.graphics.PorterDuff.Mode.SRC_IN));
-            if (!torch) c.saveLayer(lx - ir, cy - ir, lx + ir, cy + ir, layer);
-            c.drawBitmap(Kg.snapL, lx - Kg.snapL.getWidth() / 2f, cy - Kg.snapL.getHeight() / 2f, bp);
+            if (!torch) c.saveLayer(lx - ir, cyL - ir, lx + ir, cyL + ir, layer);
+            c.drawBitmap(Kg.snapL, lx - Kg.snapL.getWidth() / 2f, cyL - Kg.snapL.getHeight() / 2f, bp);
             if (!torch) c.restore();
             bp.setColorFilter(new android.graphics.PorterDuffColorFilter(vcol, android.graphics.PorterDuff.Mode.SRC_IN));
             c.saveLayer(rx - ir, cy - ir, rx + ir, cy + ir, layer);
@@ -136,16 +143,16 @@ final class SheetDeco extends View {
         android.graphics.drawable.Drawable cm = kcm != null ? kcm : icon(new String[]{"keyguard_bottom_camera_img", "ic_camera", "camera_icon"});
         int is = Math.round(26 * d);
         if (fl != null) {
-            fl.setBounds(Math.round(lx - is / 2f), Math.round(cy - is / 2f), Math.round(lx + is / 2f), Math.round(cy + is / 2f));
+            fl.setBounds(Math.round(lx - is / 2f), Math.round(cyL - is / 2f), Math.round(lx + is / 2f), Math.round(cyL + is / 2f));
             fl.setTint(torch ? 0xFF222222 : vcol);
-            if (!torch) c.saveLayer(lx - ir, cy - ir, lx + ir, cy + ir, layer);
+            if (!torch) c.saveLayer(lx - ir, cyL - ir, lx + ir, cyL + ir, layer);
             fl.draw(c);
             if (!torch) c.restore();
         } else {
             android.graphics.Path p = new android.graphics.Path();
-            p.moveTo(lx - 6 * d, cy - 11 * d); p.lineTo(lx + 6 * d, cy - 11 * d); p.lineTo(lx + 6 * d, cy - 6 * d);
-            p.lineTo(lx + 3 * d, cy - 1 * d); p.lineTo(lx + 3 * d, cy + 12 * d); p.lineTo(lx - 3 * d, cy + 12 * d);
-            p.lineTo(lx - 3 * d, cy - 1 * d); p.lineTo(lx - 6 * d, cy - 6 * d); p.close();
+            p.moveTo(lx - 6 * d, cyL - 11 * d); p.lineTo(lx + 6 * d, cyL - 11 * d); p.lineTo(lx + 6 * d, cyL - 6 * d);
+            p.lineTo(lx + 3 * d, cyL - 1 * d); p.lineTo(lx + 3 * d, cyL + 12 * d); p.lineTo(lx - 3 * d, cyL + 12 * d);
+            p.lineTo(lx - 3 * d, cyL - 1 * d); p.lineTo(lx - 6 * d, cyL - 6 * d); p.close();
             c.drawPath(p, ico);
         }
         ico.setColor(0xFFFFFFFF);
@@ -234,11 +241,11 @@ final class SheetDeco extends View {
         return null;
     }
 
-    float btnL, btnR, btnY;
+    float btnL, btnR, btnY, btnYL, landClockBot;
 
     int hit(float x, float y) {
         float r = 34 * d, cy = btnY, lx = btnL, rx = btnR;
-        if (Math.hypot(x - lx, y - cy) < r) return 0;
+        if (Math.hypot(x - lx, y - btnYL) < r) return 0;
         if (Math.hypot(x - rx, y - cy) < r) return 1;
         if (clrX > 0 && Math.hypot(x - clrX, y - clrY) < 26 * d) return 2;
         return -1;

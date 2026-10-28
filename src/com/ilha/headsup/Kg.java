@@ -143,6 +143,10 @@ final class Kg {
 
     /** Relógio em views de verdade, com o mesmo material de vidro do bloqueio. false = desenhar à mão. */
     static boolean glassClock(View deco, String ds, String ts, float top, float ht, float dateSize, int width) {
+        if (MiBlend.v4()) {   // HyperOS 4: relógio desenhado direto (sem o vidro do relógio do bloqueio)
+            if (box != null && box.getParent() != null) removeGlass();
+            return false;
+        }
         try {
             if (!(deco.getParent() instanceof ViewGroup)) return false;
             ViewGroup root = (ViewGroup) deco.getParent();
@@ -302,13 +306,38 @@ final class Kg {
             hClear.setVisibility(showClear ? View.VISIBLE : View.INVISIBLE);
             hClear.setScaleX(pressed ? 0.9f : 1f);
             hClear.setScaleY(pressed ? 0.9f : 1f);
-            hbox.setAlpha(alpha);
+            hbox.setAlpha(alpha * glassF);
             hbox.setTranslationY(deco.getTop() + gy - 20 * d);
             return true;
         } catch (Throwable t) {
             return false;
         }
     }
+
+    static int fadeLogs;
+
+    /**
+     * O vidro do HyperOS (relógio e "Notificações") é desenhado à parte e não acompanha o painel ao
+     * subir/sumir: ficava um fantasma do relógio por cima do app ao fechar. Some conforme o painel sai.
+     */
+    static void fadeGlass(View v) {
+        float f = 1f;
+        float h = v.getHeight();
+        if (ShadeSheet.closingWait || !ShadeSheet.on || v.getAlpha() < 0.01f) f = 0f;
+        else if (h > 0) f = Math.max(0f, Math.min(1f, 1f + v.getTranslationY() / (0.3f * h)));
+        glassF = f;
+        for (View x : new View[]{box, hbox}) {
+            if (x == null || x.getParent() == null) continue;
+            int vis = f <= 0.01f ? View.INVISIBLE : View.VISIBLE;
+            if (x.getVisibility() != vis) {
+                x.setVisibility(vis);
+                if (vis == View.INVISIBLE && fadeLogs++ < 3) ElasticCard.log("cortina: vidro do relógio escondido junto com o painel");
+            }
+            if (x == box && Math.abs(x.getAlpha() - f) > 0.01f) x.setAlpha(f);
+        }
+    }
+
+    static float glassF = 1f;
 
     static void removeGlass() {
         if (box != null && box.getParent() instanceof ViewGroup) ((ViewGroup) box.getParent()).removeView(box);
@@ -328,16 +357,19 @@ final class Kg {
             int w = root.getWidth(), h = root.getHeight();
             if (w <= 0) return;
             float d = root.getResources().getDisplayMetrics().density;
-            pluginSnap = false;
+            boolean plug = false;
             Object scv = shortcutCtl == null ? null : Refl.get(shortcutCtl, "shortcutContainerView");
             if (scv instanceof View && ((View) scv).isShown()) {
                 // atalhos do plugin do bloqueio (HyperOS 4): os ícones que estão na tela, com o tema
                 lookAny((View) scv, w, h, d);
-                if (bestL != null && bestR != null) pluginSnap = true;
+                if (bestL != null && bestR != null) plug = true;
                 else bestL = bestR = null;
             }
-            if (!pluginSnap) look(root, w, h, d);
+            // HyperOS 4: só os atalhos do plugin (outras imagens dos cantos não são os botões)
+            if (!plug && !composeAff) look(root, w, h, d);
+            // sem cópia nova: fica a anterior (antes alternava entre a cópia e os ícones dos recursos)
             if (bestL == null || bestR == null) return;
+            pluginSnap = plug;
             rectL = rectOf(bestL);
             rectR = rectOf(bestR);
             snapL = shot(bestL);
@@ -421,7 +453,7 @@ final class Kg {
     static Drawable icon(View root, boolean isTorch) {
         // HyperOS 4: os ícones dos atalhos do bloqueio (os mesmos que ele desenha em Compose), pelos
         // recursos do sistema: seguem o tema aplicado
-        int id = isTorch ? (SheetDeco.torch && affTorchOn != 0 ? affTorchOn : (affTorchOff != 0 ? affTorchOff : affTorchOn)) : affCamera;
+        int id = isTorch ? (SheetDeco.torch ? (affTorchOn != 0 ? affTorchOn : affTorchOff) : offTorch(root)) : affCamera;
         if (id == 0) {
             if (composeAff) return null;   // HyperOS 4: usa os ícones do sistema (pelo nome), nunca cópias da tela
             scan(root);
@@ -439,6 +471,23 @@ final class Kg {
     }
 
     static int affTorchOn, affTorchOff, affCamera;
+
+    /** Lanterna apagada: o ícone "off" do sistema; sem ele, o par do "on" pelo nome (nunca o aceso). */
+    static int offTorch(View root) {
+        if (affTorchOff != 0 || affTorchOn == 0) return affTorchOff;
+        try {
+            android.content.res.Resources r = root.getResources();
+            String n = r.getResourceEntryName(affTorchOn);
+            String pkg = r.getResourcePackageName(affTorchOn);
+            for (String alt : new String[]{n.replace("_on", "_off"), n.replace("on_", "off_"), n.replace("_enabled", "_disabled"), n.replace("_active", "")}) {
+                if (alt.equals(n)) continue;
+                int id = r.getIdentifier(alt, "drawable", pkg);
+                if (id != 0) return affTorchOff = id;
+            }
+        } catch (Throwable ignored) {
+        }
+        return 0;
+    }
     static boolean composeAff;   // HyperOS 4: atalhos do bloqueio em Compose
     static final java.util.HashMap<Integer, Drawable> affCache = new java.util.HashMap<>();
     static int affLogs;
@@ -476,7 +525,7 @@ final class Kg {
                             if (n.contains("flash") || n.contains("torch")) {
                                 if (active) affTorchOn = id; else affTorchOff = id;
                             } else if (n.contains("camera") && !n.contains("video")) {
-                                affCamera = id;
+                                if (affCamera == 0) affCamera = id;   // fica o primeiro: sem trocar de desenho depois
                             } else return;
                             if (affLogs++ < 4) ElasticCard.log("cortina: ícone do atalho do bloqueio " + n + (active ? " (aceso)" : ""));
                         } catch (Throwable ignored) {

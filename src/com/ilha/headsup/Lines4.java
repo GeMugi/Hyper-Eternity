@@ -38,6 +38,7 @@ final class Lines4 {
             ElasticCard.log("linhas da central: pronto");
         } catch (Throwable t) {
             ElasticCard.log("linhas da central indisponível: " + t);
+            Caps.fail(Keys.LINES4, t);
         }
     }
 

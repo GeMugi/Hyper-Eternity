@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.service.notification.StatusBarNotification;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 import android.widget.RemoteViews;
 import com.ilha.headsup.xp.XC_MethodHook;
 import com.ilha.headsup.xp.XposedBridge;
@@ -72,6 +73,66 @@ final class HeadsUpTweaks {
             mIsPinned = Refl.method(row, "isPinned");
             Class entry = Class.forName("com.android.systemui.statusbar.notification.collection.NotificationEntry", false, cl);
             fEntrySbn = Refl.field(entry, "mSbn");
+            // "Sem botões": a versão heads-up é a recolhida, mas o sistema ainda põe nela a fileira dos
+            // botões do sistema (bolha/janela flutuante e adiar). Numa conversa isso deixava uma faixa
+            // vazia com só o ícone da bolha embaixo. Na heads-up recolhida, o sistema não põe essa fileira.
+            XC_MethodHook noSys = new XC_MethodHook() {
+                protected void beforeHookedMethod(MethodHookParam p) {
+                    try {
+                        if (!Prefs.huNoActions || p.args.length == 0 || p.args[0] == null) return;
+                        Object hu = fHuChild.get(p.thisObject);
+                        if (p.args[0] != hu) return;
+                        Object e = fNcvEntry.get(p.thisObject);
+                        Object sbn = e != null ? fEntrySbn.get(e) : null;
+                        Notification n = sbn instanceof StatusBarNotification ? ((StatusBarNotification) sbn).getNotification() : null;
+                        if (n == null || keepActions(n)) return;
+                        p.setResult(null);
+                        if (sysLogs++ < 3) ElasticCard.log("heads-up sem botões: sem a fileira do sistema (bolha/adiar) na heads-up recolhida");
+                    } catch (Throwable ignored) {
+                    }
+                }
+            };
+            int sys = 0;
+            for (Method m : ncv.getDeclaredMethods()) {
+                String nm = m.getName();
+                if ((nm.equals("applySystemActions") || nm.equals("applyBubbleAction") || nm.equals("applySnoozeAction"))
+                        && m.getParameterTypes().length >= 1 && View.class.isAssignableFrom(m.getParameterTypes()[0])) {
+                    XposedBridge.hookMethod(m, noSys);
+                    sys++;
+                }
+            }
+            ElasticCard.log("heads-up sem botões: fileira do sistema vigiada em " + sys + " pontos");
+            // HyperOS 4: a barrinha de baixo da heads-up (arrastar para abrir em janela) fica invisível,
+            // mas continua lá para o gesto
+            try {
+                Class inj = Class.forName("com.android.systemui.statusbar.notification.row.ExpandableNotificationRowInjector", false, ncv.getClassLoader());
+                final Method getBar = inj.getDeclaredMethod("getMiniBar");
+                XC_MethodHook bar = new XC_MethodHook() {
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            View b = (View) getBar.invoke(p.thisObject);
+                            if (b == null) return;
+                            float a = Prefs.huNoActions ? 0f : 1f;
+                            if (b.getAlpha() != a) {
+                                b.setAlpha(a);
+                                if (a == 0f && barLogs++ < 2) ElasticCard.log("heads-up sem botões: barrinha da janela flutuante invisível (continua funcionando)");
+                            }
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                };
+                int nb = 0;
+                for (Method m : inj.getDeclaredMethods()) {
+                    String nm = m.getName();
+                    if (nm.equals("updateMiniBarColor") || nm.equals("updateMiniBarTranslation") || nm.equals("updateBackgroundForShadowAndMiniBar")) {
+                        XposedBridge.hookMethod(m, bar);
+                        nb++;
+                    }
+                }
+                ElasticCard.log("heads-up sem botões: barrinha vigiada em " + nb + " pontos");
+            } catch (Throwable t) {
+                // HyperOS 3: sem a barrinha
+            }
             XposedBridge.hookMethod(ncv.getDeclaredMethod("onMeasure", int.class, int.class), new XC_MethodHook() {
                 protected void beforeHookedMethod(MethodHookParam p) {
                     try {
@@ -117,9 +178,27 @@ final class HeadsUpTweaks {
         }
     }
 
+    /**
+     * "Sem botões" agora é só no modelo (installNoActions): a versão heads-up da notificação é montada
+     * pelo próprio Android como a recolhida, sem botões. Nada é escondido nem medido de novo na view;
+     * a altura é a que o sistema calcula. Aqui fica só a seta da heads-up do HyperOS 4 (opção própria).
+     */
     static void enforce(View content) throws Throwable {
         Object row = fNcvRow != null ? fNcvRow.get(content) : null;
         if (row == null) return;
+        if (!GroupStack.adapters) { legacyHide(content, row); return; }   // HyperOS 3: como antes
+        View hu = (View) fHuChild.get(content);
+        View co = fContracted != null ? (View) fContracted.get(content) : null;
+        boolean pinned = mIsPinned != null && Boolean.TRUE.equals(mIsPinned.invoke(row));
+        if (hu != null) center(hu, row);
+        if (co != null && pinned) center(co, row);
+        if (co != null && !pinned && co.getTag(TAG_CENTER) != null) place(co, row);   // voltou para a lista: seta de volta
+        // views de antes (versões antigas escondiam botões na view): devolve tudo como era
+        if (!hiddenByUs.isEmpty() || !marginByUs.isEmpty()) restoreOld();
+    }
+
+    /** HyperOS 3: os botões da heads-up recolhida escondidos na view (o jeito que funcionava lá). */
+    static void legacyHide(View content, Object row) throws Throwable {
         resolveIds(content);
         View hu = (View) fHuChild.get(content);
         View co = fContracted != null ? (View) fContracted.get(content) : null;
@@ -134,23 +213,173 @@ final class HeadsUpTweaks {
             Notification n = sbn instanceof StatusBarNotification ? ((StatusBarNotification) sbn).getNotification() : null;
             keep = n != null && keepActions(n);
         }
-        // recolhida = sem botões; a versão "heads-up" só aparece fixada, então fica sempre sem eles
         boolean collapsedHun = Prefs.huNoActions && !keep && !userOpened;
         boolean hide = collapsedHun && pinned;
-        int found = 0;
-        found += applyHide(hu, collapsedHun);
-        found += applyHide(co, hide);
-        found += applyHide(ex, hide);
-        if (pinned && diagLogs < 4) {
-            diagLogs++;
-            int vt = fVisibleType != null ? fVisibleType.getInt(content) : -9;
-            ElasticCard.log("heads-up medida: mostrando " + typeName(vt) + " · heads-up=" + describe(hu) + " recolhida=" + describe(co)
-                    + " expandida=" + describe(ex) + " · aberta pelo usuário=" + userOpened + " · escondidos=" + found);
+        applyHide(hu, collapsedHun);
+        applyHide(co, hide);
+        applyHide(ex, hide);
+    }
+
+    static int dumpLogs, sysLogs, barLogs;
+    static final java.util.HashSet<String> dumped = new java.util.HashSet<>();
+
+    static void restoreOld() {
+        for (java.util.Map.Entry<View, Integer> e : new java.util.ArrayList<>(hiddenByUs.entrySet())) e.getKey().setVisibility(e.getValue());
+        hiddenByUs.clear();
+        for (java.util.Map.Entry<View, Integer> e : new java.util.ArrayList<>(marginByUs.entrySet())) {
+            View m = e.getKey();
+            if (m.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) m.getLayoutParams();
+                lp.bottomMargin = e.getValue();
+                m.setLayoutParams(lp);
+            }
         }
-        if (hide && found > 0 && !loggedHide) {
-            loggedHide = true;
-            ElasticCard.log("heads-up: botões escondidos enquanto recolhida (aparecem ao expandir)");
+        marginByUs.clear();
+    }
+
+
+    static final int TAG_CENTER = 0x7e1e0021;
+    static int centerLogs;
+
+    static final int TAG_HID = 0x7e1e0022;
+    static int pinHookLogs;
+    static boolean pinHooked;
+
+    /** Liga uma vez por view: a cada layout, esconde a seta e centraliza o conteúdo na pílula. */
+    static void center(final View v, final Object row) {
+        hookPin(row.getClass());
+        if (v.getTag(TAG_CENTER) != null) return;
+        View.OnLayoutChangeListener l = new View.OnLayoutChangeListener() {
+            public void onLayoutChange(View x, int l1, int t1, int r1, int b1, int ol, int ot, int or, int ob) {
+                place(x, row);
+            }
+        };
+        v.setTag(TAG_CENTER, row);
+        v.addOnLayoutChangeListener(l);
+        v.requestLayout();
+    }
+
+    /** Ao soltar/fixar a heads-up, ajusta na hora (sem esperar um novo layout). */
+    static void hookPin(Class rc) {
+        if (pinHooked) return;
+        pinHooked = true;
+        int n = 0;
+        for (Class c = rc; c != null && c != View.class; c = c.getSuperclass()) {
+            for (Method m : c.getDeclaredMethods()) {
+                String nm = m.getName();
+                if (!(nm.startsWith("setPinned") || nm.equals("setHeadsUp") || nm.equals("setHeadsUpAnimatingAway"))) continue;
+                try {
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        protected void afterHookedMethod(MethodHookParam p) {
+                            try { recheck(p.thisObject); } catch (Throwable ignored) {}
+                        }
+                    });
+                    n++;
+                } catch (Throwable ignored) {}
+            }
         }
+        ElasticCard.log("heads-up (HyperOS 4): " + n + " pontos de fixar/soltar vigiados");
+    }
+
+    static void recheck(Object row) {
+        Object pl = Refl.call(row, "getPrivateLayout");
+        if (!(pl instanceof View)) return;
+        try {
+            View hu = fHuChild != null ? (View) fHuChild.get(pl) : null;
+            View co = fContracted != null ? (View) fContracted.get(pl) : null;
+            if (hu != null && hu.getTag(TAG_CENTER) != null) place(hu, row);
+            if (co != null && co.getTag(TAG_CENTER) != null) place(co, row);
+        } catch (Throwable ignored) {}
+    }
+
+    static boolean pinnedNow(Object row) {
+        try {
+            return mIsPinned != null && Boolean.TRUE.equals(mIsPinned.invoke(row));
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    static int intOf(Object o) {
+        return o instanceof Integer ? ((Integer) o).intValue() : -1;
+    }
+
+    static void place(View x, Object row) {
+        try {
+            // sem deslocar o conteúdo: o layout é o do próprio HyperOS (com a margem certa de sem botões)
+            if (x.getTranslationY() != 0f) x.setTranslationY(0f);
+            if (!pinnedNow(row) || !Prefs.huNoActions) {
+                showExpand(x);
+                return;
+            }
+            hideExpand(x);
+            if (centerLogs++ < 3) ElasticCard.log("heads-up (HyperOS 4): seta transparente (continua tocável), layout do sistema");
+        } catch (Throwable t) {
+            if (centerLogs++ < 6) ElasticCard.log("heads-up seta: " + t);
+        }
+    }
+
+    static boolean isExpand(View v) {
+        if (v.getId() == View.NO_ID) return false;
+        try {
+            String n = v.getResources().getResourceEntryName(v.getId()).toLowerCase();
+            return n.contains("expand_button") || n.contains("expandbutton") || n.equals("expand_btn") || n.contains("expand_btn");
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    static void hideExpand(final View v) {
+        if (isExpand(v)) {
+            // transparente, mas ainda tocável: o toque no lugar dele continua expandindo a heads-up
+            if (v.getVisibility() == View.INVISIBLE && v.getTag(TAG_HID) == null) return;
+            if (v.getVisibility() != View.VISIBLE) v.setVisibility(View.VISIBLE);
+            if (v.getAlpha() != 0f) {
+                v.setAlpha(0f);
+                // a hora no canto (conversas) se reposiciona sem a seta
+                v.post(new Runnable() { public void run() { try { v.getParent().requestLayout(); } catch (Throwable ignored) {} } });
+            }
+            v.setTag(TAG_HID, Boolean.TRUE);
+            return;
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) hideExpand(g.getChildAt(i));
+        }
+    }
+
+    static void showExpand(View v) {
+        if (v.getTag(TAG_HID) != null) {
+            v.setTag(TAG_HID, null);
+            if (v.getAlpha() == 0f) v.setAlpha(1f);
+            return;
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) showExpand(g.getChildAt(i));
+        }
+    }
+
+    /** Topo e fim do que aparece (textos, ícones), sem a seta, nas coordenadas da view de cima. */
+    static void bounds(View top, View v, int[] box) {
+        if (v.getVisibility() != View.VISIBLE || v.getAlpha() < 0.05f || isExpand(v)) return;
+        if (v instanceof ViewGroup && ((ViewGroup) v).getChildCount() > 0) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) bounds(top, g.getChildAt(i), box);
+            return;
+        }
+        if (v.getHeight() <= 0 || v.getWidth() <= 0 || v == top) return;
+        int y = 0;
+        for (View c = v; c != null && c != top; c = c.getParent() instanceof View ? (View) c.getParent() : null) y += c.getTop() + Math.round(c.getTranslationY());
+        int t = y, b = y + v.getHeight();
+        if (v instanceof TextView) {   // texto: só a parte das letras (sem o espaço extra da linha)
+            TextView tv = (TextView) v;
+            if (tv.getText() == null || tv.getText().length() == 0) return;
+            t = y + tv.getTotalPaddingTop();
+            b = y + v.getHeight() - tv.getTotalPaddingBottom();
+        }
+        box[0] = Math.min(box[0], t);
+        box[1] = Math.max(box[1], b);
     }
 
     static String typeName(int t) {
@@ -176,9 +405,13 @@ final class HeadsUpTweaks {
                 ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) m.getLayoutParams();
                 Integer orig = marginByUs.get(m);
                 // o espaço reservado embaixo para os botões some junto com eles
-                if (hide && n > 0 && lp.bottomMargin != 0) {
+                // HyperOS 4: o espaço que o próprio sistema deixa numa notificação sem botões (a margem de
+                // conteúdo); zerar deixava menos espaço embaixo que em cima (conteúdo fora do centro)
+                int want = GroupStack.adapters ? noActionMargin(m) : 0;
+                if (hide && n > 0 && lp.bottomMargin != want) {
                     if (orig == null) marginByUs.put(m, Integer.valueOf(lp.bottomMargin));
-                    lp.bottomMargin = 0;
+                    if (marginLogs++ < 3) ElasticCard.log("heads-up sem botões: margem de baixo " + lp.bottomMargin + " -> " + want + "px");
+                    lp.bottomMargin = want;
                     m.setLayoutParams(lp);
                 } else if (!hide && orig != null) {
                     lp.bottomMargin = orig.intValue();
@@ -188,6 +421,16 @@ final class HeadsUpTweaks {
             }
         }
         return n;
+    }
+
+    static int marginLogs, noActMargin = -1;
+
+    /** A margem de baixo que o Android usa no conteúdo de uma notificação sem botões. */
+    static int noActionMargin(View m) {
+        if (noActMargin >= 0) return noActMargin;
+        int id = android.content.res.Resources.getSystem().getIdentifier("notification_content_margin", "dimen", "android");
+        noActMargin = id != 0 ? android.content.res.Resources.getSystem().getDimensionPixelSize(id) : Math.round(16 * m.getResources().getDisplayMetrics().density);
+        return noActMargin;
     }
 
     /** Esconde (ou devolve) uma parte; retorna 1 se ela existe e está escondida por nós. */
@@ -220,6 +463,8 @@ final class HeadsUpTweaks {
                         Notification.Builder b = (Notification.Builder) p.thisObject;
                         Notification n = fBuilderN != null ? (Notification) fBuilderN.get(b) : null;
                         if (n == null || keepActions(n)) return;
+                        // a heads-up é a própria notificação recolhida (sem a fileira de botões), com as
+                        // alturas e margens que o Android calcula para ela: nada a corrigir depois
                         RemoteViews compact = b.createContentView();
                         if (compact == null) return;
                         p.setResult(compact);
@@ -247,6 +492,7 @@ final class HeadsUpTweaks {
             ElasticCard.log("heads-up sem botões: " + hooked + " versão(ões) do modelo interceptadas");
         } catch (Throwable t) {
             ElasticCard.log("heads-up sem botões indisponível: " + t);
+            Caps.fail(Keys.HU_NO_ACTIONS, t);
         }
     }
 
@@ -292,6 +538,7 @@ final class HeadsUpTweaks {
             ElasticCard.log("heads-up separada instalada");
         } catch (Throwable t) {
             ElasticCard.log("heads-up separada indisponível: " + t);
+            Caps.fail(Keys.HU_SEPARATE, t);
         }
     }
 

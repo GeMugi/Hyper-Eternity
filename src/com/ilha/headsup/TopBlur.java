@@ -55,6 +55,7 @@ final class TopBlur {
         } catch (Throwable t) {
             unsupported = true;
             ElasticCard.log("desfoque no topo indisponível: " + t);
+            Caps.fail(Keys.KG_BLUR, t);
             return false;
         }
     }

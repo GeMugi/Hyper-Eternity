@@ -59,7 +59,9 @@ public final class ElasticState {
     static final long IOS_HOLD_MS = 1200L;                           // espera o HyperOS terminar
     static final long IOS_WAIT_MS = 160L;                            // espera o ícone do app aparecer na barra
     static final float IOS_ICON_GROW = 1.15f;                        // tamanho inicial/final em relação ao ícone
-    static final float IOS_DRIP_SEC = 0.14f;                         // gota se formando embaixo do ícone
+    static final float IOS_DRIP_SEC = 0.14f;
+    static final float IOS_BAR_SEC = 0.12f;                          // barrinha abaixo do relógio antes de crescer
+    static final float IOS_BAR_W_DP = 30f, IOS_BAR_H_DP = 5f;                         // gota se formando embaixo do ícone
     static final float IOS_DRIP_DY_DP = 9f;                          // vão entre o ícone e a gota quando ela solta
     static final float IOS_DRIP_FROM = 0.55f, IOS_DRIP_TO = 1.1f;    // tamanho da gota (fração do ícone)
     static final float IOS_DRIP_STRETCH = 1.2f;                      // a gota estica na vertical
@@ -141,7 +143,7 @@ public final class ElasticState {
         float speed = (ios ? Prefs.huIosSpeed : Prefs.huSpeed) / 100f;
         float bounce = (ios ? Prefs.huIosBounce : Prefs.huBounce) / 100f;
         this.speedF = speed;
-        this.dripSec = mode == IOS_IN ? IOS_DRIP_SEC / speed : 0f;
+        this.dripSec = 0f;   // entrada como antes (sem barrinha, sem gota)
         this.posZ = zeta(ios ? IOS_POS_ZETA : POS_ZETA, bounce);
         this.wZ = zeta(ios ? IOS_W_ZETA : W_ZETA, bounce);
         this.hZ = zeta(ios ? IOS_H_ZETA : H_ZETA, bounce);
@@ -160,7 +162,7 @@ public final class ElasticState {
             long ms = (long) (Math.max(BASE_DURATION / 1000f / speed, settle) * 1000f);
             this.duration = Math.min(ms, 2500L);
         }
-        this.total = duration + (mode == IOS_IN ? IOS_WAIT_MS + (long) (dripSec * 1000f) : 0L);
+        this.total = duration + (mode == IOS_IN ? (long) (dripSec * 1000f) : 0L);
         this.row = new WeakReference(rowView);
         this.content = new WeakReference(contentView);
         Resources res = rowView.getResources();
@@ -225,13 +227,14 @@ public final class ElasticState {
                     anchorKind = 0;
                 }
                 // na entrada, o ícone costuma aparecer junto com a heads-up: espera um pouco por ele
-                if (mode == IOS_IN) t0 = -1f;
+                // (sem espera pelo ícone: a barrinha aparece na hora)
             }
         }
     }
 
     /** Procura o ícone deste app na barra de status; se achar, ele vira a origem. */
     boolean findIcon(View r) {
+        if (true) return false;   // sem gota: nasce sempre como a barrinha abaixo do relógio
         float[] a = StatusClock.iconAnchor(r, sbHeight);
         if (a == null) return false;
         originX = a[0];
@@ -299,34 +302,28 @@ public final class ElasticState {
                             : 0f;
                     blurPx = BLUR_DP * density * (1f - IslandSpring.smooth(t / blurSec));
                 } else if (mode == IOS_IN && t < dripSec) {
-                    // a gota se forma embaixo do ícone: cresce, estica e escorre, presa a ele pelo pescoço
+                    // a barrinha surge logo abaixo do relógio (como no iOS) e fica um instante
                     lastT = t;
-                    float e = IslandSpring.smooth(t / dripSec);
-                    float base = dripBase();
-                    float gw = base * (IOS_DRIP_FROM + (IOS_DRIP_TO - IOS_DRIP_FROM) * e);
-                    float gh = base * (IOS_DRIP_FROM + (IOS_DRIP_TO * IOS_DRIP_STRETCH - IOS_DRIP_FROM) * e);
-                    drawX = IslandSpring.clamp(w > 0f ? gw / w : 0.05f, 0.005f, 0.5f);
-                    drawY = IslandSpring.clamp(h > 0f ? gh / h : 0.1f, 0.01f, 0.6f);
+                    drawX = IslandSpring.clamp(w > 0f ? IOS_BAR_W_DP * density / w : 0.05f, 0.005f, 0.5f);
+                    drawY = IslandSpring.clamp(h > 0f ? IOS_BAR_H_DP * density / h : 0.03f, 0.005f, 0.5f);
                     startSX = drawX;
-                    dripY = dripCenter(0f) + (dripCenter(1f) - dripCenter(0f)) * e;
+                    dripY = 0f;
                     pos = 0f;
                     posX = 0f;
-                    reveal = IslandSpring.smooth(t / fadeSec);
-                    clipRadius = Math.min(w * drawX, h * drawY) * 0.5f;
-                    blurPx = IOS_BLUR_DP * density;
+                    reveal = IslandSpring.smooth(t / (dripSec * 0.6f));
+                    clipRadius = h * drawY * 0.5f;
+                    blurPx = IOS_BLUR_DP * density * 0.5f;
                 } else if (mode == IOS_IN) {
                     float tAll = t;
                     lastT = tAll;
-                    t = tAll - dripSec;   // a mola começa de onde a gota soltou
-                    dripY = dripCenter(1f);
-                    float sw = dripBase() * IOS_DRIP_TO;
-                    float sh = dripBase() * IOS_DRIP_TO * IOS_DRIP_STRETCH;
-                    float sx0 = IslandSpring.clamp(w > 0f ? sw / w : 0.05f, 0.005f, 0.5f);
-                    float sy0 = IslandSpring.clamp(h > 0f ? sh / h : 0.1f, 0.01f, 0.6f);
+                    t = tAll - dripSec;   // a mola cresce a partir da barrinha
+                    dripY = 0f;
+                    float sx0 = IslandSpring.clamp(w > 0f ? IOS_START_W_DP * density / w : 0.1f, 0.01f, 0.5f);
+                    float sy0 = IslandSpring.clamp(h > 0f ? IOS_START_H_DP * density / h : 0.1f, 0.02f, 0.6f);
                     float ws = IslandSpring.step(t, wZ, wW);
                     startSX = sx0;
                     pos = IslandSpring.step(t, posZ, posW);
-                    posX = IslandSpring.step(t, xZ, wW);   // borda esquerda: sai de baixo do relógio quase sem passar
+                    posX = IslandSpring.step(t, xZ, wW);
                     drawX = sx0 + (1f - sx0) * ws;
                     drawY = sy0 + (1f - sy0) * IslandSpring.step(t, hZ, hW);
                     reveal = IslandSpring.smooth(tAll / fadeSec);
@@ -380,6 +377,7 @@ public final class ElasticState {
                     }
                     if (f >= 1f) {
                         // fica escondido (bem pequeno e transparente) até o HyperOS tirar a linha
+                        if (!holding) NotifBar.show();   // e fica a barrinha avisando que há notificações
                         holding = true;
                         drawX = 0.001f;
                         drawY = 0.001f;

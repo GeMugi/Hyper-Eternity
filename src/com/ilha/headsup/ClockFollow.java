@@ -76,6 +76,7 @@ final class ClockFollow {
             installFixed(cl, c);
         } catch (Throwable t) {
             ElasticCard.log("relógio do bloqueio indisponível: " + t);
+            Caps.fail(Keys.KG_CLOCK, t);
         }
     }
 
@@ -146,6 +147,7 @@ final class ClockFollow {
             ElasticCard.log("relógio do bloqueio: posição inicial fixa instalada");
         } catch (Throwable t) {
             ElasticCard.log("relógio fixo indisponível: " + t);
+            Caps.fail(Keys.KG_CLOCK_FIXED, t);
         }
     }
 

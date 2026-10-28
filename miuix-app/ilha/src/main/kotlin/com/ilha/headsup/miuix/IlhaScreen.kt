@@ -194,6 +194,16 @@ fun IlhaScreen(store: Store) {
             toast(context, if (text != null && store.importJson(text)) "Ajustes importados" else "Arquivo inválido")
         }
     }
+    val calendarPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (!ok) toast(context, "Sem acesso à agenda")
+    }
+    val askCalendar = {
+        if (context.checkSelfPermission(android.Manifest.permission.READ_CALENDAR) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            toast(context, "Acesso à agenda já permitido")
+        } else {
+            calendarPerm.launch(android.Manifest.permission.READ_CALENDAR)
+        }
+    }
     val contactsPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) priv = 4 else toast(context, "Sem acesso aos contatos")
     }
@@ -326,7 +336,7 @@ fun IlhaScreen(store: Store) {
                                 0 -> headsUpPage(store, cardBackdrop, context)
                                 1 -> notificationsPage(store, cardBackdrop)
                                 2 -> stacksPage(store, cardBackdrop)
-                                3 -> lockPage(store, cardBackdrop)
+                                3 -> lockPage(store, cardBackdrop, askCalendar)
                                 4 -> curtainPage(store, cardBackdrop)
                                 5 -> statusBarPage(store, cardBackdrop)
                                 6 -> musicPage(store, cardBackdrop)
@@ -662,7 +672,15 @@ private fun LazyListScope.headsUpPage(store: Store, backdrop: LayerBackdrop?, co
         }
     }
     section("hc", "Conteúdo da heads-up", backdrop) {
-        Toggle(store.huNoActions, "Sem botões", "Recolhida, mostra só título e texto. Os botões aparecem ao expandir. Ligações e alarmes mantêm os botões.")
+        if (store.huStyle.value == 1) {
+            Toggle(store.barOn, "Barrinha de notificações", "Depois que a heads-up recua, fica uma barrinha abaixo do relógio avisando que há notificações. Some ao abrir a central.")
+            IntSlider(store.barDx, "Barrinha (iOS): para o lado", "Move a barrinha para a esquerda ou para a direita, a partir do relógio.", -80, 80, " dp", step = 1)
+            IntSlider(store.barDy, "Barrinha (iOS): altura na tela", "Sobe ou desce a barrinha, a partir do fim da barra de status.", -30, 60, " dp", step = 1)
+            IntSlider(store.barW, "Barrinha (iOS): largura", "Comprimento da barrinha.", 10, 90, " dp", step = 1)
+            IntSlider(store.barH, "Barrinha (iOS): espessura", "Altura da barrinha.", 2, 14, " dp", step = 1)
+            IntSlider(store.barA, "Barrinha (iOS): opacidade", "Quanto a barrinha aparece.", 10, 100, "%", step = 1)
+        }
+        Toggle(store.huNoActions, "Sem botões", "Recolhida, mostra só título e texto. Os botões aparecem ao expandir. Ligações e alarmes mantêm os botões. No HyperOS 4, a seta de expandir e a barrinha de janela flutuante ficam invisíveis, mas continuam funcionando.")
         Toggle(store.huSeparate, "Uma por notificação", "Mostra só a notificação nova, sem juntar com as anteriores do app.")
     }
 }
@@ -693,6 +711,7 @@ private fun LazyListScope.stacksPage(store: Store, backdrop: LayerBackdrop?) {
         Toggle(store.stEnabled, "Empilhar notificações", "As que passam do limite encolhem embaixo, como no HyperOS 4.")
         IntSlider(store.stOffset, "Limite acima do fim da tela", "Maior começa a pilha mais alto.", 0, 400, " dp", step = 2)
         Toggle(store.stGroups, "Grupos expandidos por cartão", "Cada notificação de um grupo aberto empilha separada.")
+        Toggle(store.landSplit, "Player ao lado em paisagem", "Na gaveta em paisagem, com música e notificações, o player fica numa coluna à esquerda e as notificações à direita.")
         Toggle(store.groupStack, "Grupos em pilha (teste)", "Notificações do mesmo app viram uma pilha de cartões. Toque para abrir; a seta empilha de novo.")
         IntSlider(store.gsSpeed, "Pilha: velocidade", "Mais alto é mais rápido.", 50, 200, "%")
         IntSlider(store.gsBounce, "Pilha: bounce", "0% sem pulo; 300% pula bem mais.", 0, 300, "%")
@@ -701,7 +720,7 @@ private fun LazyListScope.stacksPage(store: Store, backdrop: LayerBackdrop?) {
     }
 }
 
-private fun LazyListScope.lockPage(store: Store, backdrop: LayerBackdrop?) {
+private fun LazyListScope.lockPage(store: Store, backdrop: LayerBackdrop?, askCalendar: () -> Unit) {
     section("kg", "Tela de bloqueio", backdrop) {
         Toggle(store.kgHmc, "Bloqueio com o HyperMusicCover", "Relógio, capa, player e ilha do bloqueio usam o HyperMusicCover (precisa da extensão, veja Extensões).")
         Toggle(store.kgKeep, "Manter notificações após desbloquear", "As notificações vistas continuam no bloqueio até serem apagadas.")
@@ -716,11 +735,20 @@ private fun LazyListScope.lockPage(store: Store, backdrop: LayerBackdrop?) {
         Toggle(store.kgHide, "Puxar para empilhar (teste)", "Com a lista no topo, continue rolando: as notificações se empilham até sobrar o player.")
         CardText("Vale na próxima vez que a tela bloquear.")
     }
+    section("lw", "Widgets do bloqueio", backdrop) {
+        Toggle(store.lockWidgets, "Widgets no bloqueio", "Uma fileira de widgets no estilo iOS acima da lanterna e da câmera.")
+        Toggle(store.lwAgenda, "Agenda e alarme", "Próximo evento da agenda e próximo alarme.")
+        Toggle(store.lwBattery, "Bateria", "Nível da bateria, verde carregando.")
+        Toggle(store.lwWeather, "Clima", "Temperatura do app de clima da Xiaomi.")
+        Toggle(store.lwSteps, "Passos", "Passos do dia (app Mi Fitness).")
+        ArrowPreference(title = tr("Permitir acesso à agenda"), onClick = askCalendar)
+    }
 }
 
 private fun LazyListScope.curtainPage(store: Store, backdrop: LayerBackdrop?) {
     section("ios", "Cortina", backdrop) {
         Toggle(store.shadeSheet, "Central em cortina (teste)", "A central desce do topo como uma cortina, com o fundo do bloqueio, relógio grande, lanterna e câmera. Desligado = central do HyperOS.")
+        Toggle(store.sheetPlayerFree, "Player rola com a lista", "Na cortina, o player deixa de ficar fixo abaixo do relógio e rola junto com as notificações. Use se outro módulo (como o HyperTweak) também mexer no player.")
         Toggle(store.sheetRound, "Cantos arredondados na cortina", "Arredonda a borda de baixo da cortina enquanto ela se move.")
         Toggle(store.sheetBlur, "Fundo desfocado", "Usa o desfoque do HyperOS (a tela de trás desfocada). Desligado = papel de parede do bloqueio.")
     }

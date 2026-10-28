@@ -66,6 +66,7 @@ final class ConvMiui {
             ElasticCard.log("conversas no visual do HyperOS: instalado (" + (Prefs.convMiui ? "ligado" : "desligado") + ")");
         } catch (Throwable t) {
             ElasticCard.log("conversas no visual do HyperOS: indisponível " + t);
+            Caps.fail(Keys.CONV_MIUI, t);
         }
     }
 

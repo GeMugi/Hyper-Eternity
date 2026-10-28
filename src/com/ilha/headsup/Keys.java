@@ -8,7 +8,7 @@ public final class Keys {
     public static final String FILE = "ajustes";
     /** Grupo das preferências remotas do LSPosed (o app escreve, a Interface do Sistema lê). */
     public static final String GROUP = "ilha";
-    public static final String VERSION = "7.9.58";
+    public static final String VERSION = "7.9.59";
 
     public static final String HU_ENABLED = "hu_enabled";
     public static final String HU_STYLE = "hu_style";        // 0 = OriginOS (sai da ilha), 1 = iOS (sai do ícone do app)
@@ -17,11 +17,33 @@ public final class Keys {
     public static final String HU_IOS_SPEED = "hu_ios_speed";    // % (50..200), animação iOS
     public static final String HU_IOS_BOUNCE = "hu_ios_bounce";  // % (0..200), animação iOS
     public static final String HU_NO_ACTIONS = "hu_no_actions";  // heads-up sem botões
+    public static final String HU_HIDE_ARROW = "hu_hide_arrow";  // HyperOS 4: seta da heads-up invisível
+    public static final boolean D_HU_HIDE_ARROW = false;
+    public static final String SHEET_PLAYER_FREE = "sheet_player_free";
+    public static final boolean D_SHEET_PLAYER_FREE = false;
+    public static final String BAR_ON = "bar_on";
+    public static final boolean D_BAR_ON = false;
+    public static final String BAR_DX = "bar_dx";
+    public static final int D_BAR_DX = 0;
+    public static final String BAR_DY = "bar_dy";
+    public static final int D_BAR_DY = 2;
+    public static final String BAR_W = "bar_w";
+    public static final int D_BAR_W = 30;
+    public static final String BAR_H = "bar_h";
+    public static final int D_BAR_H = 5;
+    public static final String BAR_A = "bar_a";
+    public static final int D_BAR_A = 67;
     public static final String HU_SEPARATE = "hu_separate";      // uma heads-up por notificação
 
     public static final String ST_ENABLED = "st_enabled";
     public static final String ST_OFFSET = "st_offset";      // dp acima do fim da gaveta
     public static final String ST_GROUPS = "st_groups";
+    public static final String LOCK_WIDGETS = "lock_widgets", LW_BATTERY = "lw_battery", LW_WEATHER = "lw_weather", LW_AGENDA = "lw_agenda", LW_STEPS = "lw_steps";
+    public static final boolean D_LOCK_WIDGETS = false;   // widgets do bloqueio (estilo iOS) acima dos atalhos
+    public static final String LAND_SPLIT = "land_split";   // paisagem: player numa coluna, notificações na outra
+    public static final boolean D_LAND_SPLIT = false;
+    public static final String LAND_MINI = "land_mini";     // paisagem: player compacto estilo iOS no lugar do do HyperOS
+    public static final boolean D_LAND_MINI = false;
 
     public static final String KG_ENABLED = "kg_enabled";
     public static final String KG_SCROLL = "kg_scroll";

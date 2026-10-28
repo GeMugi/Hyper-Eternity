@@ -55,6 +55,7 @@ final class ModalFull {
             ElasticCard.log("mensagem inteira no menu: " + (n > 0 ? "pronto" : "não encontrado"));
         } catch (Throwable t) {
             ElasticCard.log("mensagem inteira no menu indisponível: " + t);
+            Caps.fail(Keys.MODAL_FULL, t);
         }
     }
 

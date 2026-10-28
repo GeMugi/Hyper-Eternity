@@ -52,6 +52,7 @@ final class PureBlur {
             ElasticCard.log("fundo do player igual às notificações: " + (n > 0 ? "instalado" : "mistura de cor não encontrada"));
         } catch (Throwable t) {
             ElasticCard.log("fundo do player só com desfoque: indisponível " + t);
+            Caps.fail(Keys.MEDIA_PURE, t);
         }
     }
 

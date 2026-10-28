@@ -306,6 +306,68 @@ final class GroupStack {
             });
             // o cartão da frente fica com a altura do mais alto da pilha: o conteúdo dele desce
             // até o meio do cartão em vez de ficar colado no topo com um vazio embaixo
+            // HyperOS 4: ao terminar de abrir/fechar, o HyperOS refaz o fundo do grupo e o cartão do
+            // resumo voltava a aparecer atrás da pilha (cartão maior por trás da frente)
+            if (adapters) {
+                try {
+                    XposedBridge.hookMethod(rowCls.getDeclaredMethod("updateBackgroundForGroupState"), new XC_MethodHook() {
+                        protected void afterHookedMethod(MethodHookParam p) {
+                            try {
+                                if (on()) headerCard(p.thisObject);
+                            } catch (Throwable ignored) {
+                            }
+                        }
+                    });
+                } catch (Throwable t) {
+                    ElasticCard.log("grupos em pilha: fundo do grupo (HyperOS 4) não vigiado: " + t);
+                }
+                // HyperOS 4: com o grupo fechado, cada aplicação de estado mostra o cartão do resumo
+                // (o "cartão do grupo" do sistema) e apaga o fundo do 1º cartão. Na pilha isso dava
+                // um cartão maior atrás e o da frente sem vidro (Mensagens, operadora, promoções).
+                try {
+                    Class nvs = Class.forName(rowCls.getName() + "$NotificationViewState", false, rowCls.getClassLoader());
+                    XC_MethodHook after = new XC_MethodHook() {
+                        protected void afterHookedMethod(MethodHookParam p) {
+                            try {
+                                Object v = p.args[0];
+                                if (v == null || !rowCls.isInstance(v) || !Boolean.TRUE.equals(Refl.get(v, "mIsSummaryWithChildren")) || !on()) return;
+                                headerCard(v);
+                                frontCard(v);
+                            } catch (Throwable ignored) {
+                            }
+                        }
+                    };
+                    int n = 0;
+                    for (Method m : nvs.getDeclaredMethods()) {
+                        if ((m.getName().equals("applyToView") || m.getName().equals("animateTo")) && m.getParameterTypes().length >= 1) {
+                            XposedBridge.hookMethod(m, after);
+                            n++;
+                        }
+                    }
+                    ElasticCard.log("grupos em pilha: estado do grupo (HyperOS 4) vigiado em " + n + " pontos");
+                    // heads-up de um grupo: o efeito de vidro da heads-up refaz o cartão do resumo
+                    // (ficava um fundo grande e claro atrás da pilha fixada no topo)
+                    try {
+                        Class eff = Class.forName("com.android.systemui.statusbar.notification.style.vieweffect.HeadsUpNotificationBlurEffect", false, rowCls.getClassLoader());
+                        XC_MethodHook hun = new XC_MethodHook() {
+                            protected void afterHookedMethod(MethodHookParam p) {
+                                try {
+                                    Object v = p.args.length > 0 ? p.args[0] : null;
+                                    if (v == null || !rowCls.isInstance(v) || !Boolean.TRUE.equals(Refl.get(v, "mIsSummaryWithChildren")) || !on()) return;
+                                    headerCard(v);
+                                    frontCard(v);
+                                    if (hunLogs++ < 2) ElasticCard.log("grupos em pilha: cartão do resumo escondido na heads-up do grupo");
+                                } catch (Throwable ignored) {
+                                }
+                            }
+                        };
+                        for (Method m : eff.getDeclaredMethods()) if (m.getName().equals("apply")) XposedBridge.hookMethod(m, hun);
+                    } catch (Throwable ignored) {
+                    }
+                } catch (Throwable t) {
+                    ElasticCard.log("grupos em pilha: estado do grupo (HyperOS 4) não vigiado: " + t);
+                }
+            }
             XposedBridge.hookMethod(rowCls.getDeclaredMethod("setActualHeight", int.class, boolean.class), new XC_MethodHook() {
                 protected void afterHookedMethod(MethodHookParam p) {
                     try {
@@ -522,6 +584,7 @@ final class GroupStack {
         }
     }
     static long lastTapAct;
+    static int sumLogs;
     static int firstLogs;
 
     static float downX, downY;
@@ -536,6 +599,17 @@ final class GroupStack {
         } catch (Throwable ignored) {
         }
         return null;
+    }
+
+    /** O último toque caiu na ponta direita do cartão (onde fica a seta ⌄)? */
+    static boolean tapOnArrow(View v) {
+        if (android.os.SystemClock.uptimeMillis() - downAt > 800 || !v.isShown()) return false;
+        int[] l = new int[2];
+        v.getLocationOnScreen(l);
+        float d = v.getResources().getDisplayMetrics().density;
+        int h = v.getHeight();
+        try { Object ah = Refl.call(v, "getActualHeight"); if (ah instanceof Integer && ((Integer) ah).intValue() > 0) h = ((Integer) ah).intValue(); } catch (Throwable ignored) {}
+        return downX >= l[0] + v.getWidth() - 64 * d && downX <= l[0] + v.getWidth() && downY >= l[1] && downY <= l[1] + h;
     }
 
     /** O último toque (até 0,8 s atrás) caiu dentro deste cartão, na tela? */
@@ -590,6 +664,11 @@ final class GroupStack {
             Object c = Refl.get(parent, "mChildrenContainer");
             Object kids = c == null ? null : Refl.get(c, "mAttachedChildren");
             if (!(kids instanceof List) || ((List) kids).isEmpty() || ((List) kids).get(0) != child) return false;
+            // só a seta (⌄) do 1º cartão recolhe o grupo; tocar no resto do cartão abre a notificação
+            if (child instanceof View && !tapOnArrow((View) child)) {
+                if (firstLogs++ < 4) ElasticCard.log("grupos em pilha: toque no 1º cartão abre a notificação (só a seta recolhe)");
+                return false;
+            }
             Object entry = Refl.call(parent, "getEntry");
             String k = key(entry);
             fanned.remove(k);
@@ -667,7 +746,10 @@ final class GroupStack {
             if (true) {   // cabeçalho do grupo fica sem cartão, como o "App (n)" do HyperOS 3
                 java.lang.reflect.Field sf0 = Refl.field(row.getClass(), "mShowNoBackground");
                 if (sf0 != null && !sf0.getBoolean(row)) sf0.setBoolean(row, true);
-                if (bg.getVisibility() != View.GONE) bg.setVisibility(View.GONE);
+                if (bg.getVisibility() != View.GONE) {
+                    bg.setVisibility(View.GONE);
+                    if (sumLogs++ < 4) ElasticCard.log("grupos em pilha: cartão do resumo escondido de novo (" + key(Refl.call(row, "getEntry")) + ")");
+                }
                 return;
             }
             Object c = Refl.get(row, "mChildrenContainer");
@@ -684,6 +766,32 @@ final class GroupStack {
             if (bg.getVisibility() != View.VISIBLE) bg.setVisibility(View.VISIBLE);
             Method sa = Refl.anyMethod(bg.getClass(), "setActualHeight");
             if (sa != null && sa.getParameterTypes().length == 1) sa.invoke(bg, Integer.valueOf(hh));
+        } catch (Throwable t) {
+            err(t);
+        }
+    }
+
+    static int hunLogs;
+
+    static int frontLogs;
+
+    /** O 1º cartão da pilha com o vidro dele (o HyperOS 4 apaga com o grupo fechado). */
+    static void frontCard(Object row) {
+        try {
+            Object c = Refl.get(row, "mChildrenContainer");
+            Object kids = c == null ? null : Refl.get(c, "mAttachedChildren");
+            if (!(kids instanceof List) || ((List) kids).isEmpty()) return;
+            Object k = ((List) kids).get(0);
+            java.lang.reflect.Field f = Refl.field(k.getClass(), "mShowNoBackground");
+            if (f != null && f.getBoolean(k)) f.setBoolean(k, false);
+            Object bg = Refl.get(k, "mBackgroundNormal");
+            if (!(bg instanceof View)) return;
+            View b = (View) bg;
+            if (b.getVisibility() != View.VISIBLE) b.setVisibility(View.VISIBLE);
+            if (b.getAlpha() < 1f) {
+                b.setAlpha(1f);
+                if (frontLogs++ < 3) ElasticCard.log("grupos em pilha: vidro do 1º cartão devolvido (" + key(Refl.call(row, "getEntry")) + ")");
+            }
         } catch (Throwable t) {
             err(t);
         }
@@ -927,6 +1035,7 @@ final class GroupStack {
 
     static void layoutRow(Object row) throws Throwable {
         if (adapters) childBackgrounds(row);
+        if (adapters) headerCard(row);   // o resumo nunca mostra cartão próprio atrás da pilha
 
                             if (!Boolean.TRUE.equals(Refl.get(row, "mIsSummaryWithChildren"))) return;
                             // conteúdo oculto no bloqueio: o grupo fica fechado do jeito do HyperOS
