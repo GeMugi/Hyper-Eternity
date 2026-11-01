@@ -79,6 +79,13 @@ final class Tr {
         M.put("Barrinha de notificações", "Notification bar");
         M.put("Depois que a heads-up recua, fica uma barrinha abaixo do relógio avisando que há notificações. Some ao abrir a central.", "After the heads-up retracts, a small bar stays below the clock to show there are notifications. It disappears when you open the shade.");
         M.put("Player rola com a lista", "Player scrolls with the list");
+        M.put("Teclado", "Keyboard");
+        M.put("Gboard desfocado (teste)", "Blurred Gboard (test)");
+        M.put("O fundo do Gboard fica transparente com o desfoque do sistema atrás. Precisa do Gboard marcado no escopo do LSPosed e de reabrir o teclado.", "Gboard's background becomes transparent with the system blur behind it. Needs Gboard checked in the LSPosed scope and the keyboard reopened.");
+        M.put("Intensidade do desfoque", "Blur strength");
+        M.put("Quanto o fundo atrás do teclado fica borrado.", "How blurred the background behind the keyboard gets.");
+        M.put("Cor do fundo", "Background color");
+        M.put("Quanto da cor original do teclado fica por cima do desfoque. Mais alto deixa as teclas mais legíveis.", "How much of the keyboard's original color stays over the blur. Higher keeps the keys easier to read.");
         M.put("Na cortina, o player deixa de ficar fixo abaixo do relógio e rola junto com as notificações. Use se outro módulo (como o HyperTweak) também mexer no player.", "In the curtain, the player stops being pinned below the clock and scrolls with the notifications. Use it if another module (like HyperTweak) also moves the player.");
         M.put("Versão", "Version");
         M.put("os ajustes valem na hora", "settings apply instantly");
@@ -473,6 +480,13 @@ final class Tr {
         E.put("Barrinha de notificações", "Barrita de notificaciones");
         E.put("Depois que a heads-up recua, fica uma barrinha abaixo do relógio avisando que há notificações. Some ao abrir a central.", "Después de que la notificación flotante se retira, queda una barrita debajo del reloj indicando que hay notificaciones. Desaparece al abrir el panel.");
         E.put("Player rola com a lista", "El reproductor se desplaza con la lista");
+        E.put("Teclado", "Teclado");
+        E.put("Gboard desfocado (teste)", "Gboard desenfocado (prueba)");
+        E.put("O fundo do Gboard fica transparente com o desfoque do sistema atrás. Precisa do Gboard marcado no escopo do LSPosed e de reabrir o teclado.", "El fondo de Gboard se vuelve transparente con el desenfoque del sistema detrás. Necesita Gboard marcado en el ámbito de LSPosed y volver a abrir el teclado.");
+        E.put("Intensidade do desfoque", "Intensidad del desenfoque");
+        E.put("Quanto o fundo atrás do teclado fica borrado.", "Cuánto se desenfoca el fondo detrás del teclado.");
+        E.put("Cor do fundo", "Color del fondo");
+        E.put("Quanto da cor original do teclado fica por cima do desfoque. Mais alto deixa as teclas mais legíveis.", "Cuánto del color original del teclado queda sobre el desenfoque. Más alto mantiene las teclas más legibles.");
         E.put("Na cortina, o player deixa de ficar fixo abaixo do relógio e rola junto com as notificações. Use se outro módulo (como o HyperTweak) também mexer no player.", "En la cortina, el reproductor deja de quedar fijo debajo del reloj y se desplaza con las notificaciones. Úsalo si otro módulo (como HyperTweak) también mueve el reproductor.");
         E.put("Versão", "Versión");
         E.put("os ajustes valem na hora", "los ajustes se aplican al instante");

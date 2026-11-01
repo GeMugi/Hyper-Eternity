@@ -10,6 +10,7 @@ public interface XposedModuleInterface {
     interface PackageLoadedParam {
         String getPackageName();
         ClassLoader getDefaultClassLoader();
+        boolean isFirstPackage();
     }
 
     interface SystemServerStartingParam {

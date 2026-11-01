@@ -36,6 +36,10 @@ public class ModernMain extends XposedModule {
         XposedBridge.init(this);
         try {
             String pk = param.getPackageName();
+            if ("com.google.android.inputmethod.latin".equals(pk)) {
+                if (claim("gboard")) KbBlur.install();
+                return;
+            }
             if (!"com.android.systemui".equals(pk)) return;
             if (!claim("systemui")) return;
             FullText.install("SystemUI");

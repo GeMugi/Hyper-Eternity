@@ -759,6 +759,13 @@ private fun LazyListScope.curtainPage(store: Store, backdrop: LayerBackdrop?) {
 }
 
 private fun LazyListScope.statusBarPage(store: Store, backdrop: LayerBackdrop?) {
+    section("kb", "Teclado", backdrop) {
+        Toggle(store.kbBlur, "Gboard desfocado (teste)", "O fundo do Gboard fica transparente com o desfoque do sistema atrás. Precisa do Gboard marcado no escopo do LSPosed e de reabrir o teclado.")
+        if (store.kbBlur.value) {
+            IntSlider(store.kbBlurR, "Intensidade do desfoque", "Quanto o fundo atrás do teclado fica borrado.", 0, 150, "")
+            IntSlider(store.kbBlurA, "Cor do fundo", "Quanto da cor original do teclado fica por cima do desfoque. Mais alto deixa as teclas mais legíveis.", 0, 100, "%")
+        }
+    }
     section("pl", "Pílulas do relógio", backdrop) {
         Toggle(store.recPill, "Relógio vermelho ao gravar a tela", "Durante a gravação de tela, o relógio da barra de status ganha uma pílula vermelha, como no iOS.")
         Toggle(store.locPill, "Relógio azul com a localização em uso", "Quando algum app está usando a localização, o relógio ganha uma pílula azul.")

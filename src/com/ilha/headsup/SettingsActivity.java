@@ -1851,6 +1851,10 @@ public class SettingsActivity extends Activity {
     }
 
     private void buildSistema(LinearLayout page) {
+        LinearLayout kb = section(page, "Teclado");
+        toggle(kb, "Gboard desfocado (teste)", "O fundo do Gboard fica transparente com o desfoque do sistema atrás. Precisa do Gboard marcado no escopo do LSPosed e de reabrir o teclado.", Keys.KB_BLUR, Keys.D_KB_BLUR);
+        slider(kb, "Intensidade do desfoque", "Quanto o fundo atrás do teclado fica borrado.", Keys.KB_BLUR_R, Keys.D_KB_BLUR_R, 0, 150, "");
+        slider(kb, "Cor do fundo", "Quanto da cor original do teclado fica por cima do desfoque. Mais alto deixa as teclas mais legíveis.", Keys.KB_BLUR_A, Keys.D_KB_BLUR_A, 0, 100, "%");
         LinearLayout sys = section(page, "Sistema");
         LinearLayout sysButtons = row();
         sysButtons.addView(button("Reiniciar Interface do Sistema", false, new View.OnClickListener() {

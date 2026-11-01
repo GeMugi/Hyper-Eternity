@@ -8,7 +8,7 @@ public final class Keys {
     public static final String FILE = "ajustes";
     /** Grupo das preferências remotas do LSPosed (o app escreve, a Interface do Sistema lê). */
     public static final String GROUP = "ilha";
-    public static final String VERSION = "7.9.59";
+    public static final String VERSION = "7.9.60";
 
     public static final String HU_ENABLED = "hu_enabled";
     public static final String HU_STYLE = "hu_style";        // 0 = OriginOS (sai da ilha), 1 = iOS (sai do ícone do app)
@@ -19,6 +19,9 @@ public final class Keys {
     public static final String HU_NO_ACTIONS = "hu_no_actions";  // heads-up sem botões
     public static final String HU_HIDE_ARROW = "hu_hide_arrow";  // HyperOS 4: seta da heads-up invisível
     public static final boolean D_HU_HIDE_ARROW = false;
+    public static final String KB_BLUR = "kb_blur", KB_BLUR_R = "kb_blur_r", KB_BLUR_A = "kb_blur_a";
+    public static final boolean D_KB_BLUR = false;
+    public static final int D_KB_BLUR_R = 60, D_KB_BLUR_A = 45;
     public static final String SHEET_PLAYER_FREE = "sheet_player_free";
     public static final boolean D_SHEET_PLAYER_FREE = false;
     public static final String BAR_ON = "bar_on";
