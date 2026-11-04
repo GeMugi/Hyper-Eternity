@@ -53,6 +53,7 @@ final class Prefs {
     static boolean kgHide = Keys.D_KG_HIDE;
     static boolean privOn = Keys.D_PRIV_ON, privUnlocked = Keys.D_PRIV_UNLOCKED;
     static java.util.Set<String> privApps = new java.util.HashSet<>(), privConvs = new java.util.HashSet<>(), privContacts = new java.util.HashSet<>();
+    static boolean islandHide = Keys.D_ISLAND_HIDE, playerIos = Keys.D_PLAYER_IOS, explicitE = Keys.D_EXPLICIT_E;
     static boolean barOn = Keys.D_BAR_ON, sheetPlayerFree = Keys.D_SHEET_PLAYER_FREE;
     static int barDx = Keys.D_BAR_DX, barDy = Keys.D_BAR_DY, barW = Keys.D_BAR_W, barH = Keys.D_BAR_H, barA = Keys.D_BAR_A;
     static int gsSpeed = Keys.D_GS_SPEED, gsBounce = Keys.D_GS_BOUNCE, gsDepth = Keys.D_GS_DEPTH, gsShadow = Keys.D_GS_SHADOW;
@@ -257,6 +258,9 @@ final class Prefs {
         gsSpeed = clamp(p.getInt(Keys.GS_SPEED, Keys.D_GS_SPEED), 50, 200);
         gsBounce = clamp(p.getInt(Keys.GS_BOUNCE, Keys.D_GS_BOUNCE), 0, 300);
         barOn = b(p, Keys.BAR_ON, Keys.D_BAR_ON);
+        islandHide = b(p, Keys.ISLAND_HIDE, Keys.D_ISLAND_HIDE);
+        playerIos = b(p, Keys.PLAYER_IOS, Keys.D_PLAYER_IOS);
+        explicitE = b(p, Keys.EXPLICIT_E, Keys.D_EXPLICIT_E);
         sheetPlayerFree = b(p, Keys.SHEET_PLAYER_FREE, Keys.D_SHEET_PLAYER_FREE);
         barDx = clamp(p.getInt(Keys.BAR_DX, Keys.D_BAR_DX), -80, 80);
         barDy = clamp(p.getInt(Keys.BAR_DY, Keys.D_BAR_DY), -30, 60);

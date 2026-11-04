@@ -46,6 +46,11 @@ public final class BridgeProvider extends ContentProvider {
             out.putBoolean("__synced", RemoteSync.synced());
             boolean music = false;
             try {
+                c.getPackageManager().getPackageInfo("com.yzc26623.HyperMusicCoverEnhanced", 0);
+                music = true;
+            } catch (Throwable ignored) {
+            }
+            if (!music) try {
                 c.getPackageManager().getPackageInfo("com.ilha.headsup.music", 0);
                 music = true;
             } catch (Throwable ignored) {
@@ -73,6 +78,8 @@ public final class BridgeProvider extends ContentProvider {
             sp.edit().clear().apply();
         } else if ("test".equals(method)) {
             out.putBoolean("ok", testHeadsUp(c, sp));
+        } else if ("kbrestart".equals(method)) {
+            restartGboard(sp);
         } else if ("restart".equals(method)) {
             new Thread(new Runnable() {
                 public void run() {
@@ -141,5 +148,19 @@ public final class BridgeProvider extends ContentProvider {
     @Override
     public int update(Uri u, ContentValues v, String s, String[] a) {
         return 0;
+    }
+
+    /** Reinicia o Gboard: o módulo dentro dele fecha o processo ao ver o pedido; com root, também força a parada. */
+    static void restartGboard(SharedPreferences sp) {
+        sp.edit().putLong(Keys.KB_RESTART, System.currentTimeMillis()).apply();
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    Thread.sleep(600);
+                    Runtime.getRuntime().exec(new String[]{"su", "-c", "am force-stop com.google.android.inputmethod.latin"}).waitFor();
+                } catch (Throwable ignored) {
+                }
+            }
+        }).start();
     }
 }

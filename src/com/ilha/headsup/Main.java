@@ -35,6 +35,10 @@ public final class Main {
             Lines4.install(cl);
             RecPill.install(cl);
             ShadeSheet.install(cl);
+            IslandHide.install();
+            IosPlayer.install();
+            Explicit.install(cl);
+            ClockDots.install(cl);
             LockWidgets.install(cl);
         GroupStack.install(cl);
             if (!MiBlend.v4()) Caps.off(Keys.HU_HIDE_ARROW, "só no HyperOS 4");

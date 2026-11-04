@@ -323,7 +323,7 @@ final class Kg {
     static void fadeGlass(View v) {
         float f = 1f;
         float h = v.getHeight();
-        if (ShadeSheet.closingWait || !ShadeSheet.on || v.getAlpha() < 0.01f) f = 0f;
+        if (ShadeSheet.closingWait || !ShadeSheet.sheet() || v.getAlpha() < 0.01f) f = 0f;
         else if (h > 0) f = Math.max(0f, Math.min(1f, 1f + v.getTranslationY() / (0.3f * h)));
         glassF = f;
         for (View x : new View[]{box, hbox}) {

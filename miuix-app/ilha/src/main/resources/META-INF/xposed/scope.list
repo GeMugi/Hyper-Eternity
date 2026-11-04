@@ -1,3 +1,5 @@
 system
 com.android.systemui
 com.google.android.inputmethod.latin
+com.instagram.android
+miui.systemui.plugin

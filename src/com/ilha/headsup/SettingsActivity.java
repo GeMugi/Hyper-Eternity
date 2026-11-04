@@ -895,13 +895,20 @@ public class SettingsActivity extends Activity {
 
     // ------------------------------------------------------------------ Extensões
 
-    static final String MUSIC_PKG = "com.ilha.headsup.music";
+    /** A extensão usa o pacote original do HyperMusicCover-Enhanced; as versões antigas, o nosso. */
+    static final String[] MUSIC_PKGS = {"com.yzc26623.HyperMusicCoverEnhanced", "com.ilha.headsup.music"};
+    static String MUSIC_PKG = MUSIC_PKGS[0];
 
     private boolean musicInstalled() {
-        try {
-            getPackageManager().getPackageInfo(MUSIC_PKG, 0);
-            return true;
-        } catch (Throwable t) {
+        for (String pk : MUSIC_PKGS) {
+            try {
+                getPackageManager().getPackageInfo(pk, 0);
+                MUSIC_PKG = pk;
+                return true;
+            } catch (Throwable ignored) {
+            }
+        }
+        {
             return false;
         }
     }
@@ -1842,6 +1849,7 @@ public class SettingsActivity extends Activity {
     private void buildCentral(LinearLayout page) {
         LinearLayout ios = section(page, "Cortina");
         toggle(ios, "Central em cortina (teste)", "A central desce do topo como uma cortina, com o fundo do bloqueio, relógio grande, lanterna e câmera. Desligado = central do HyperOS.", Keys.SHADE_SHEET, false);
+        toggle(ios, "Esconder a ilha ao puxar a central (teste)", "Com a ilha de música ativa, a puxada da central pode engasgar. Enquanto a central está aberta, a ilha fica escondida e volta quando ela fecha.", Keys.ISLAND_HIDE, Keys.D_ISLAND_HIDE);
         toggle(ios, "Player rola com a lista", "Na cortina, o player deixa de ficar fixo abaixo do relógio e rola junto com as notificações. Use se outro módulo (como o HyperTweak) também mexer no player.", Keys.SHEET_PLAYER_FREE, Keys.D_SHEET_PLAYER_FREE);
         toggle(ios, "Cantos arredondados na cortina", "Arredonda a borda de baixo da cortina enquanto ela se move.", Keys.SHEET_ROUND, true);
         toggle(ios, "Fundo desfocado", "Usa o desfoque do HyperOS (a tela de trás desfocada). Desligado = papel de parede do bloqueio.", Keys.SHEET_BLUR, true);
@@ -1851,10 +1859,21 @@ public class SettingsActivity extends Activity {
     }
 
     private void buildSistema(LinearLayout page) {
+        LinearLayout ig = section(page, "Instagram");
+        toggle(ig, "Barra de abas de vidro no Instagram (teste)", "A barra de baixo do Instagram vira uma pílula de vidro flutuante, com o feed passando por trás. Precisa do Instagram marcado no escopo do LSPosed.", Keys.IG_GLASS, Keys.D_IG_GLASS);
         LinearLayout kb = section(page, "Teclado");
         toggle(kb, "Gboard desfocado (teste)", "O fundo do Gboard fica transparente com o desfoque do sistema atrás. Precisa do Gboard marcado no escopo do LSPosed e de reabrir o teclado.", Keys.KB_BLUR, Keys.D_KB_BLUR);
         slider(kb, "Intensidade do desfoque", "Quanto o fundo atrás do teclado fica borrado.", Keys.KB_BLUR_R, Keys.D_KB_BLUR_R, 0, 150, "");
         slider(kb, "Cor do fundo", "Quanto da cor original do teclado fica por cima do desfoque. Mais alto deixa as teclas mais legíveis.", Keys.KB_BLUR_A, Keys.D_KB_BLUR_A, 0, 100, "%");
+        slider(kb, "Vidro das teclas", "Força do vidro claro nas teclas. Mais baixo deixa as teclas mais transparentes; 100% mantém as cores do tema do Gboard.", Keys.KB_KEYS_A, Keys.D_KB_KEYS_A, 10, 100, "%");
+        LinearLayout kbButtons = row();
+        kbButtons.addView(button("Reiniciar o Gboard", false, new View.OnClickListener() {
+            public void onClick(View v) {
+                BridgeProvider.restartGboard(prefs);
+                Toast.makeText(SettingsActivity.this, Tr.t("O Gboard vai abrir de novo com os ajustes novos."), Toast.LENGTH_SHORT).show();
+            }
+        }), weight());
+        kb.addView(kbButtons);
         LinearLayout sys = section(page, "Sistema");
         LinearLayout sysButtons = row();
         sysButtons.addView(button("Reiniciar Interface do Sistema", false, new View.OnClickListener() {
@@ -1876,6 +1895,8 @@ public class SettingsActivity extends Activity {
 
     private void buildMusic(LinearLayout page) {
         LinearLayout pg = section(page, "Player da gaveta");
+        toggle(pg, "Player da central no estilo ColorOS (teste)", "Na página de música e no detalhe do player da central (inclusive com o mod iOS26 Control Center): capa de ponta a ponta no topo que some num degradê, com título e artista no centro.", Keys.PLAYER_IOS, Keys.D_PLAYER_IOS);
+        toggle(pg, "Selo E de conteúdo explícito", "Mostra o selo \"E\" (como no Spotify e no iOS) antes do título das músicas explícitas, no player do HyperOS e no player estilo ColorOS. Depende do app de música informar a marca de explícito.", Keys.EXPLICIT_E, Keys.D_EXPLICIT_E);
         toggle(pg, "Fundo igual às notificações", "O player usa o mesmo vidro das outras notificações, em vez do mais escuro.", Keys.MEDIA_PURE, Keys.D_MEDIA_PURE);
         toggle(pg, "Capa gira e brilha na troca", "Como no ColorOS 17: ao trocar a música, a capa gira e solta um brilho que se espalha pelo cartão.", Keys.ALBUM_GLOW, Keys.D_ALBUM_GLOW);
         toggle(pg, "Brilho em onda de luz", "Como no ColorOS 17: uma onda de luz nasce na capa e se espalha pelo cartão, como uma gota na água. Desligado, a capa solta uma mancha desfocada. Posição e distância só valem para a mancha.", Keys.GLOW_SWEEP, Keys.D_GLOW_SWEEP);

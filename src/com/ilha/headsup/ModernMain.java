@@ -37,7 +37,11 @@ public class ModernMain extends XposedModule {
         try {
             String pk = param.getPackageName();
             if ("com.google.android.inputmethod.latin".equals(pk)) {
-                if (claim("gboard")) KbBlur.install();
+                if (claim("gboard")) KbBlur.install(param.getDefaultClassLoader());
+                return;
+            }
+            if ("com.instagram.android".equals(pk)) {
+                if (claim("instagram")) IgGlass.install();
                 return;
             }
             if (!"com.android.systemui".equals(pk)) return;

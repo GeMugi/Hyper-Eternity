@@ -748,6 +748,7 @@ private fun LazyListScope.lockPage(store: Store, backdrop: LayerBackdrop?, askCa
 private fun LazyListScope.curtainPage(store: Store, backdrop: LayerBackdrop?) {
     section("ios", "Cortina", backdrop) {
         Toggle(store.shadeSheet, "Central em cortina (teste)", "A central desce do topo como uma cortina, com o fundo do bloqueio, relógio grande, lanterna e câmera. Desligado = central do HyperOS.")
+        Toggle(store.islandHide, "Esconder a ilha ao puxar a central (teste)", "Com a ilha de música ativa, a puxada da central pode engasgar. Enquanto a central está aberta, a ilha fica escondida e volta quando ela fecha.")
         Toggle(store.sheetPlayerFree, "Player rola com a lista", "Na cortina, o player deixa de ficar fixo abaixo do relógio e rola junto com as notificações. Use se outro módulo (como o HyperTweak) também mexer no player.")
         Toggle(store.sheetRound, "Cantos arredondados na cortina", "Arredonda a borda de baixo da cortina enquanto ela se move.")
         Toggle(store.sheetBlur, "Fundo desfocado", "Usa o desfoque do HyperOS (a tela de trás desfocada). Desligado = papel de parede do bloqueio.")
@@ -759,11 +760,21 @@ private fun LazyListScope.curtainPage(store: Store, backdrop: LayerBackdrop?) {
 }
 
 private fun LazyListScope.statusBarPage(store: Store, backdrop: LayerBackdrop?) {
+    section("ig", "Instagram", backdrop) {
+        Toggle(store.igGlass, "Barra de abas de vidro no Instagram (teste)", "A barra de baixo do Instagram vira uma pílula de vidro flutuante, com o feed passando por trás. Precisa do Instagram marcado no escopo do LSPosed.")
+    }
     section("kb", "Teclado", backdrop) {
         Toggle(store.kbBlur, "Gboard desfocado (teste)", "O fundo do Gboard fica transparente com o desfoque do sistema atrás. Precisa do Gboard marcado no escopo do LSPosed e de reabrir o teclado.")
         if (store.kbBlur.value) {
             IntSlider(store.kbBlurR, "Intensidade do desfoque", "Quanto o fundo atrás do teclado fica borrado.", 0, 150, "")
             IntSlider(store.kbBlurA, "Cor do fundo", "Quanto da cor original do teclado fica por cima do desfoque. Mais alto deixa as teclas mais legíveis.", 0, 100, "%")
+            IntSlider(store.kbKeysA, "Vidro das teclas", "Força do vidro claro nas teclas. Mais baixo deixa as teclas mais transparentes; 100% mantém as cores do tema do Gboard.", 10, 100, "%")
+            val kbCtx = LocalContext.current
+            ArrowPreference(
+                title = tr("Reiniciar o Gboard"),
+                summary = tr("Fecha o Gboard para ele abrir de novo com os ajustes novos (as cores das teclas só mudam assim)."),
+                onClick = { Bridge.call(kbCtx, "kbrestart"); toast(kbCtx, "O Gboard vai abrir de novo com os ajustes novos.") },
+            )
         }
     }
     section("pl", "Pílulas do relógio", backdrop) {
@@ -781,6 +792,8 @@ private fun LazyListScope.statusBarPage(store: Store, backdrop: LayerBackdrop?) 
 
 private fun LazyListScope.musicPage(store: Store, backdrop: LayerBackdrop?) {
     section("pg", "Player da gaveta", backdrop) {
+        Toggle(store.playerIos, "Player da central no estilo ColorOS (teste)", "Na página de música e no detalhe do player da central (inclusive com o mod iOS26 Control Center): capa de ponta a ponta no topo que some num degradê, com título e artista no centro.")
+        Toggle(store.explicitE, "Selo E de conteúdo explícito", "Mostra o selo \"E\" (como no Spotify e no iOS) antes do título das músicas explícitas, no player do HyperOS e no player estilo ColorOS. Depende do app de música informar a marca de explícito.")
         Toggle(store.mediaPure, "Fundo igual às notificações", "O player usa o mesmo vidro das outras notificações, em vez do mais escuro.")
         Toggle(store.albumGlow, "Capa gira e brilha na troca", "Como no ColorOS 17: ao trocar a música, a capa gira e solta um brilho que se espalha pelo cartão.")
         Toggle(store.glowSweep, "Brilho em onda de luz", "Como no ColorOS 17: uma onda de luz nasce na capa e se espalha pelo cartão, como uma gota na água. Desligado, a capa solta uma mancha desfocada. Posição e distância só valem para a mancha.")

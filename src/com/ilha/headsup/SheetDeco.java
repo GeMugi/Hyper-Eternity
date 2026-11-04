@@ -94,7 +94,8 @@ final class SheetDeco extends View {
         getLocationInWindow(b);
         // posição do bloqueio na cortina SEM o deslocamento dela: os botões descem junto com a folha
         float sheetTy = getParent() instanceof View ? ((View) getParent()).getTranslationY() : 0f;
-        int bx = b[0], by = Math.round(b[1] - sheetTy);
+        // sem o deslocamento lateral da troca com o centro de controle: os botões deslizam junto com a folha
+        int bx = Math.round(b[0] - getTranslationX()), by = Math.round(b[1] - sheetTy);
         if (land) {   // a posição copiada é do bloqueio em retrato: em paisagem, nos cantos de baixo
             lx = 64 * d;
             rx = w - 64 * d;

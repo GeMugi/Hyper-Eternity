@@ -65,6 +65,56 @@ final class ShadeSheet {
                 protected void beforeHookedMethod(MethodHookParam p) {
                     android.view.MotionEvent me = (android.view.MotionEvent) p.args[0];
                     if (forwardLand(me)) { p.setResult(Boolean.TRUE); return; }   // player movido (paisagem)
+                    if (NATIVE) {
+                        // gestos do sistema; só anotamos o dedo para a cortina subir junto ao fechar
+                        if (selfCancel) return;
+                        int ac = me.getActionMasked();
+                        if (ac == android.view.MotionEvent.ACTION_DOWN) {
+                            nDownY = me.getRawY(); nDownX = me.getRawX(); nDownShown = shown; fingerDown = true; eatSent = false; takeover = false;
+                            if (nvt != null) nvt.recycle();
+                            nvt = android.view.VelocityTracker.obtain();
+                        }
+                        nRawY = me.getRawY();
+                        if (nvt != null) {
+                            android.view.MotionEvent c = android.view.MotionEvent.obtain(me);
+                            c.setLocation(me.getRawX(), me.getRawY());
+                            nvt.addMovement(c);
+                            c.recycle();
+                        }
+                        if (ac == android.view.MotionEvent.ACTION_UP || ac == android.view.MotionEvent.ACTION_CANCEL) fingerDown = false;
+                        if (ac == android.view.MotionEvent.ACTION_MOVE && !takeover && nOn && nDownShown >= 0.95f && !sliding
+                                && !postSlide && !switchingNow && pending.isEmpty()) {
+                            // arrastar para cima com a central aberta (lista no fim): o gesto é da cortina desde
+                            // o começo; o HyperOS nem começa a fechar (retrair cartões, tirar o desfoque)
+                            View pv0 = (View) p.thisObject;
+                            float dy = nDownY - me.getRawY(), dx = Math.abs(me.getRawX() - nDownX);
+                            float slop = 12f * pv0.getResources().getDisplayMetrics().density;
+                            if (dy > slop && dy > dx * 1.4f && !listCanScrollDown(pv0)) {
+                                takeover = true;
+                                nDownY = me.getRawY() + slop;   // sem pulo
+                                if (takeLogs++ < 4) ElasticCard.log("cortina: fechar pelo dedo assumido pela cortina");
+                            }
+                        }
+                        boolean eat = (takeover || !pending.isEmpty()) && ac != android.view.MotionEvent.ACTION_DOWN;
+                        if (eat && !eatSent) {
+                            // o HyperOS já pediu para fechar: daqui em diante o dedo é só da cortina
+                            // (senão ele segue retraindo os cartões e tirando o desfoque)
+                            eatSent = true;
+                            android.view.MotionEvent c = android.view.MotionEvent.obtain(me);
+                            c.setAction(android.view.MotionEvent.ACTION_CANCEL);
+                            selfCancel = true;
+                            try { ((View) p.thisObject).dispatchTouchEvent(c); } finally { selfCancel = false; c.recycle(); }
+                        }
+                        if (ac == android.view.MotionEvent.ACTION_UP || ac == android.view.MotionEvent.ACTION_CANCEL) {
+                            float vel = 0f;
+                            if (nvt != null) { nvt.computeCurrentVelocity(1000); vel = nvt.getYVelocity(); nvt.recycle(); nvt = null; }
+                            release(vel);
+                        }
+                        if (nOn && fingerDown && nDownShown >= 0.95f && !sliding && !postSlide)
+                            nativeFollow((View) p.thisObject, lastF);
+                        if (eat) p.setResult(Boolean.TRUE);
+                        return;
+                    }
                     if (dead()) return;
                     // HyperOS 4: com uma heads-up na tela, o puxar começa em cima dela (a barra de status fica
                     // por baixo) e chega aqui; a cortina assume como se fosse da barra de status
@@ -104,6 +154,7 @@ final class ShadeSheet {
                 XposedBridge.hookMethod(npvc.getDeclaredMethod("startInputFocusTransfer"), new XC_MethodHook() {
                     protected void beforeHookedMethod(MethodHookParam p) {
                         try {
+                            if (NATIVE) return;
                             View v = panel == null ? null : panel.get();
                             if (v == null || !Prefs.shadeSheet || locked(v) || on || animating) return;
                             // puxar na tela inicial: o launcher passa o gesto; a cortina assume no lugar do HyperOS
@@ -130,13 +181,14 @@ final class ShadeSheet {
                 XC_MethodHook skip = new XC_MethodHook() {
                     protected void beforeHookedMethod(MethodHookParam p) {
                         // o launcher termina/cancela o gesto dele; quem decide é o nosso dedo
-                        if (dead()) return;
+                        if (NATIVE || dead()) return;
                         if (transfer || on) p.setResult(null);
                     }
                 };
                 XposedBridge.hookMethod(npvc.getDeclaredMethod("onTrackingStarted$2"), new XC_MethodHook() {
                     protected void beforeHookedMethod(MethodHookParam p) {
                         try {
+                            if (NATIVE) return;
                             View v = panel == null ? null : panel.get();
                             if (!on || dragging || transfer || v == null || !expanded()) return;
                             // o HyperOS já decidiu que o dedo está fechando a central (não rolando a lista):
@@ -159,6 +211,16 @@ final class ShadeSheet {
                 XposedBridge.hookMethod(npvc.getDeclaredMethod("flingToHeight", float.class, boolean.class, float.class, float.class, boolean.class), new XC_MethodHook() {
                     protected void beforeHookedMethod(MethodHookParam p) {
                         try {
+                            if (NATIVE) {
+                                // fechar pelo HyperOS: a cortina sobe primeiro e só então o sistema fecha
+                                if (!nOn || bypass || Boolean.TRUE.equals(p.args[1])) return;
+                                final Object self = p.thisObject;
+                                final Object[] args = p.args.clone();
+                                final java.lang.reflect.Method m = (java.lang.reflect.Method) p.method;
+                                p.setResult(null);
+                                defer(m, self, args);
+                                return;
+                            }
                             if (!on || Boolean.TRUE.equals(p.args[1])) return;
                             p.setResult(null);
                             if (android.os.SystemClock.uptimeMillis() < noCloseUntil) return;   // depois do limpar tudo: fica aberta
@@ -214,7 +276,20 @@ final class ShadeSheet {
                 if (m.getName().equals("startPanelExpandAnimation$default")) {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         protected void beforeHookedMethod(MethodHookParam p) {
-                            if (!active() || !Boolean.TRUE.equals(p.args[1])) return;
+                            if (!active()) return;
+                            if (!Boolean.TRUE.equals(p.args[1])) {
+                                // fechando: os cartões não fazem a saída do HyperOS, sobem com a cortina
+                                if (NATIVE) {
+                                    p.args[3] = Boolean.FALSE;
+                                    if (nOn && !bypass && !postSlide) {
+                                        final Object[] args = p.args.clone();
+                                        final java.lang.reflect.Method mm = (java.lang.reflect.Method) p.method;
+                                        p.setResult(null);
+                                        defer(mm, null, args);
+                                    }
+                                }
+                                return;
+                            }
                             p.args[2] = Float.valueOf(thresh());
                             p.args[3] = Boolean.FALSE;
                         }
@@ -222,7 +297,15 @@ final class ShadeSheet {
                 } else if (m.getName().equals("startPanelVisibleAnimation")) {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         protected void beforeHookedMethod(MethodHookParam p) {
-                            if (!active() || !Boolean.TRUE.equals(p.args[0])) return;
+                            if (!active()) return;
+                            if (!Boolean.TRUE.equals(p.args[0])) {
+                                // saída dos cartões do HyperOS: espera a cortina subir
+                                if (NATIVE && nOn && !bypass && !postSlide) {
+                                    p.setResult(null);
+                                    defer((java.lang.reflect.Method) p.method, p.thisObject, p.args.clone());
+                                }
+                                return;
+                            }
                             p.args[1] = Boolean.FALSE;
                         }
                     });
@@ -247,6 +330,14 @@ final class ShadeSheet {
                 XposedBridge.hookMethod(pc.getDeclaredMethod("hide", boolean.class), new XC_MethodHook() {
                     protected void beforeHookedMethod(MethodHookParam p) {
                         try {
+                            if (NATIVE) {
+                                if (!nOn || bypass || !Boolean.TRUE.equals(p.args[0])) return;
+                                final Object self = p.thisObject;
+                                final java.lang.reflect.Method m = (java.lang.reflect.Method) p.method;
+                                p.setResult(null);
+                                defer(m, self, new Object[]{Boolean.FALSE});
+                                return;
+                            }
                             if (!Boolean.TRUE.equals(p.args[0]) || !active() || closingWait) return;
                             View v = panel == null ? null : panel.get();
                             if (v == null) return;
@@ -261,6 +352,46 @@ final class ShadeSheet {
                 });
             } catch (Throwable t) {
                 ElasticCard.log("cortina: passo 4b (fechar animado): " + t);
+            }
+            // desfoque da central: ao começar a fechar o HyperOS já baixava o desfoque, com a cortina ainda
+            // subindo (os cartões ficavam transparentes por cima da tela inicial). Enquanto ela fecha, fica.
+            try {
+                Class ba = Class.forName("com.android.systemui.shade.NotificationPanelBlurAnimator", false, cl);
+                for (java.lang.reflect.Method m : ba.getDeclaredMethods()) {
+                    if (!m.getName().startsWith("updateBlurRatio")) continue;
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        protected void beforeHookedMethod(MethodHookParam p) {
+                            if (!NATIVE || !nOn || bypass || postSlide || switchingNow) return;
+                            if (!(takeover || sliding || !pending.isEmpty())) return;
+                            if (((Number) p.args[0]).floatValue() < 0.999f) p.setResult(null);
+                        }
+                    });
+                }
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: passo 4e (desfoque ao fechar): " + t);
+            }
+            // o que de fato anima a central do HyperOS ao fechar (desfoque, cartões, transparência) é a
+            // expansão; qualquer caminho de fechar passa por aqui. Com a cortina aberta, fica para depois dela subir.
+            try {
+                Class ea = Class.forName("com.android.systemui.shade.NotificationPanelExpansionAnimator", false, cl);
+                for (java.lang.reflect.Method m : ea.getDeclaredMethods()) {
+                    if (!m.getName().startsWith("updateExpansion")) continue;
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        protected void beforeHookedMethod(MethodHookParam p) {
+                            try {
+                                if (!NATIVE || !nOn || bypass || switchingNow || postSlide) return;
+                                if (((Number) p.args[0]).floatValue() > 0.5f) return;   // abrindo
+                                p.setResult(null);
+                                defer((java.lang.reflect.Method) p.method, p.thisObject, p.args.clone());
+                            } catch (Throwable t) {
+                                ElasticCard.log("cortina expansão: " + t);
+                            }
+                        }
+                    });
+                    ElasticCard.log("cortina: expansão do HyperOS segurada ao fechar");
+                }
+            } catch (Throwable t) {
+                ElasticCard.log("cortina: passo 4d (expansão): " + t);
             }
             try {
                 hookSwitch(cl);
@@ -336,6 +467,8 @@ final class ShadeSheet {
 
     static boolean active() {
         View v = panel == null ? null : panel.get();
+        // gestos do sistema: desde o começo da puxada (as animações da central original não entram)
+        if (NATIVE) return v != null && enabled(v);
         return on && v != null && enabled(v);
     }
 
@@ -357,12 +490,362 @@ final class ShadeSheet {
         }
     }
 
+    /**
+     * Gestos do sistema: quem puxa, solta, fecha e troca para o centro de controle é o próprio
+     * HyperOS. A cortina só acompanha a abertura dele (0 = fechada, 1 = aberta): desce do topo
+     * na mesma medida, e as animações próprias da central ficam desligadas por baixo dela.
+     */
+    static final boolean NATIVE = true;
+    static int nativeLogs;
+
+    static void nativeFollow(View v, float f) {
+        boolean want = Prefs.shadeSheet && !locked(v) && !Float.isNaN(f);
+        if (!want) {
+            if (nOn) nativeOff(v);
+            return;
+        }
+        if (postSlide) {
+            // a cortina já subiu; o sistema termina de fechar por trás, invisível
+            float hh = v.getHeight() > 0 ? v.getHeight() : v.getResources().getDisplayMetrics().heightPixels;
+            if (v.getTranslationY() != -hh) v.setTranslationY(-hh);
+            postMinF = Math.min(postMinF, f);
+            if (f > postMinF + 0.03f || (tracking() && fingerDown)) {
+                // abriu de novo antes de o sistema terminar de fechar: a cortina desce do topo
+                postSlide = false;
+                nOn = true;
+                shown = 0f;
+                if (v.getAlpha() != 1f) v.setAlpha(1f);
+                natDecoOn(v);
+                if (deferLogs++ < 30) ElasticCard.log("cortina: reaberta durante o fechamento");
+                return;
+            }
+            if (f <= 0.001f || android.os.SystemClock.uptimeMillis() - postSlideAt > 1500) {
+                postSlide = false;
+                nativeOffHidden(v);
+            }
+            return;
+        }
+        if (f > 0.001f && !nOn) {
+            nOn = true;
+            shown = 0f;
+            if (v.getAlpha() != 1f) v.setAlpha(1f);
+            natDecoOn(v);
+            if (nativeLogs++ < 3) ElasticCard.log("cortina: a central original desce como cortina");
+        }
+        if (!nOn || sliding) return;
+        float h = v.getHeight() > 0 ? v.getHeight() : v.getResources().getDisplayMetrics().heightPixels;
+        // alvo: enquanto o dedo arrasta, a altura puxada (expandHeight, em px); solto, a fração do
+        // sistema (que ele leva a 1 ao abrir e a 0 ao fechar)
+        float target = Math.max(0f, Math.min(1f, f));
+        boolean tr = tracking();
+        if (fingerDown && nDownShown >= 0.95f && (takeover || tr || !pending.isEmpty())) {
+            // fechando pelo dedo: a cortina sobe junto com ele
+            target = Math.max(0f, Math.min(1f, 1f - (nDownY - nRawY) / h));
+        } else if (tr) {
+            float eh = expandHeight();
+            if (!Float.isNaN(eh)) target = Math.max(0f, Math.min(1f, eh / (h * 0.85f)));
+        }
+        // a cortina corre atrás do alvo (sem pulos quando o dedo solta)
+        // abrindo (solto): corre atrás do alvo; fechando: acompanha o sistema na hora (senão a central
+        // some antes de a cortina terminar de subir)
+        if (!tr && target < shown) shown = target;
+        else shown += (target - shown) * (tr ? 0.6f : 0.28f);
+        if (Math.abs(target - shown) < 0.002f) shown = target;
+        float e = shown;
+        float ty = -(1f - e) * h;
+        if (Math.abs(v.getTranslationY() - ty) > 0.5f) v.setTranslationY(ty);
+        if (Math.abs(target - shown) > 0.002f) v.postInvalidateOnAnimation();
+        if (dbgLogs < 25 && android.os.SystemClock.uptimeMillis() - dbgAt > 120) {
+            dbgAt = android.os.SystemClock.uptimeMillis();
+            dbgLogs++;
+            ElasticCard.log("cortina nativa: f=" + f + " puxado=" + expandHeight() + " limite=" + thresh() + " arrastando=" + tr + " alvo=" + target + " mostrado=" + shown);
+        }
+        if (f <= 0f && shown <= 0.001f) nativeOff(v);
+    }
+
+    static float shown, nDownY, nRawY, nDownShown;
+    static boolean nOn, postSlide;
+    static long postSlideAt;
+    static int dbgLogs;
+    static long dbgAt;
+
+    static float postMinF = 1f;
+    static boolean natDeco;
+
+    /** Cortina ativa para os enfeites (relógio, lanterna/câmera, lista abaixo do relógio). */
+    static boolean sheet() {
+        return on || (NATIVE && nOn && natDeco);
+    }
+
+    /** Cortina nativa: relógio grande, lanterna e câmera por cima da central original (retrato). */
+    static void natDecoOn(View v) {
+        try {
+            if (v.getWidth() > v.getHeight()) { natDecoOff(v); return; }   // paisagem: central original
+            natDeco = true;
+            hookPreDraw(v);
+            deco(v, true);
+            layoutList(v, true);
+            if (decoV != null) decoV.invalidate();
+        } catch (Throwable t) {
+            ElasticCard.log("cortina relógio: " + t);
+        }
+    }
+
+    static void natDecoOff(View v) {
+        if (!natDeco) return;
+        natDeco = false;
+        try {
+            deco(v, false);
+            layoutList(v, false);
+            if (listExtra != 0) { listExtra = 0; requestStack(); }
+            if (dismissView != null) {
+                View dc = dismissView.getParent() instanceof View ? (View) dismissView.getParent() : dismissView;
+                dc.setAlpha(1f);
+                dc.setVisibility(View.VISIBLE);
+            }
+        } catch (Throwable t) {
+            ElasticCard.log("cortina relógio fim: " + t);
+        }
+    }
+
+    /** Fecho terminado: a saída dos cartões do HyperOS ainda roda por um instante; fica invisível até lá. */
+    static void nativeOffHidden(final View v) {
+        natDecoOff(v);
+        nOn = false;
+        shown = 0f;
+        if (v.getTranslationY() != 0f) v.setTranslationY(0f);
+        final long tag = ++hideSeq;
+        v.postDelayed(new Runnable() {
+            public void run() {
+                if (tag == hideSeq && !nOn && !postSlide && v.getAlpha() != 1f) v.setAlpha(1f);
+            }
+        }, 900);
+    }
+
+    static long hideSeq;
+
+    static void nativeOff(View v) {
+        natDecoOff(v);
+        nOn = false;
+        shown = 0f;
+        if (v.getTranslationY() != 0f) v.setTranslationY(0f);
+        if (v.getAlpha() != 1f) v.setAlpha(1f);
+    }
+
+    static boolean bypass, sliding, fingerDown, selfCancel, eatSent, takeover;
+    static float nDownX;
+    static int takeLogs;
+    static java.lang.ref.WeakReference<View> nList;
+
+    /** A lista de notificações ainda rola para baixo? (então o arrastar é dela, não de fechar) */
+    static boolean listCanScrollDown(View root) {
+        try {
+            View l = nList == null ? null : nList.get();
+            if (l == null || !l.isAttachedToWindow()) {
+                l = findByName(root, "NotificationStackScrollLayout");
+                nList = new java.lang.ref.WeakReference<>(l);
+            }
+            if (l == null) return false;
+            java.lang.reflect.Method r = l.getClass().getMethod("getScrollRange");
+            java.lang.reflect.Method o = l.getClass().getMethod("getOwnScrollY");
+            int range = ((Number) r.invoke(l)).intValue(), own = ((Number) o.invoke(l)).intValue();
+            boolean can = own < range - 2;
+            if (takeLogs < 12) { takeLogs++; ElasticCard.log("cortina: lista rola? " + can + " (rolagem " + own + "/" + range + ")"); }
+            return can;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    static View findByName(View v, String n) {
+        if (v.getClass().getName().endsWith(n)) return v;
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                View r = findByName(g.getChildAt(i), n);
+                if (r != null) return r;
+            }
+        }
+        return null;
+    }
+    static android.view.VelocityTracker nvt;
+    static final java.util.ArrayList<Object[]> pending = new java.util.ArrayList<>();
+
+    /** O HyperOS quer fechar: guarda o pedido. Com o dedo na tela, a cortina segue o dedo; ao soltar, decide. */
+    static void defer(java.lang.reflect.Method m, Object self, Object[] args) {
+        if (switchingNow) { callOrig(m, self, args); return; }
+        pending.add(new Object[]{m, self, args});
+        if (deferLogs++ < 30) ElasticCard.log("cortina: fechar do HyperOS guardado (" + m.getName() + ", dedo=" + fingerDown + ")");
+        if (!fingerDown) beginClose();
+    }
+
+    static int deferLogs;
+
+    static void beginClose() {
+        slideUp(new Runnable() {
+            public void run() {
+                java.util.ArrayList<Object[]> l = new java.util.ArrayList<>(pending);
+                pending.clear();
+                for (Object[] o : l) callOrig((java.lang.reflect.Method) o[0], o[1], (Object[]) o[2]);
+            }
+        });
+    }
+
+    /** Dedo saiu da tela. Se o HyperOS pediu para fechar: fecha se subiu o suficiente ou foi rápido; senão volta. */
+    static void release(float vel) {
+        if (takeover) {
+            takeover = false;
+            View v = panel == null ? null : panel.get();
+            float h = v != null && v.getHeight() > 0 ? v.getHeight() : 2400f;
+            float up = (nDownY - nRawY) / h;
+            if (pending.isEmpty() && (up > 0.12f || vel < -900f)) {
+                // fecha pelo caminho normal (hide animado), que cai no nosso: a cortina sobe e depois fecha
+                try {
+                    java.lang.reflect.Method hm = expandCtl.getClass().getDeclaredMethod("hide", boolean.class);
+                    hm.setAccessible(true);
+                    hm.invoke(expandCtl, Boolean.TRUE);
+                } catch (Throwable t) {
+                    ElasticCard.log("cortina fechar (dedo): " + t);
+                    collapse();
+                }
+                if (pending.isEmpty() && !sliding) beginClose();
+                return;
+            }
+            if (pending.isEmpty()) {
+                nDownShown = 0f;
+                if (v != null) v.postInvalidateOnAnimation();   // volta a descer
+                return;
+            }
+        }
+        if (pending.isEmpty() || sliding) return;
+        View v = panel == null ? null : panel.get();
+        float h = v != null && v.getHeight() > 0 ? v.getHeight() : 2400f;
+        float up = (nDownY - nRawY) / h;
+        if (true) {
+            beginClose();   // o HyperOS já começou a fechar por dentro; voltar deixava a central travada
+        } else {
+            Object[] reopen = null;
+            for (Object[] o : pending) if (((java.lang.reflect.Method) o[0]).getName().startsWith("startPanelExpandAnimation")) { reopen = o; break; }
+            pending.clear();   // desistiu: a cortina volta a descer (a fração continua em 1)
+            if (reopen != null) {
+                Object[] a = ((Object[]) reopen[2]).clone();
+                a[1] = Boolean.TRUE;
+                callOrig((java.lang.reflect.Method) reopen[0], reopen[1], a);
+            }
+            nDownShown = 0f;
+            if (v != null) v.postInvalidateOnAnimation();
+            if (deferLogs++ < 8) ElasticCard.log("cortina: fechar desistido, volta (subiu " + up + ")");
+        }
+    }
+    static android.animation.ValueAnimator slideAnim;
+
+    static void callOrig(java.lang.reflect.Method m, Object self, Object[] args) {
+        bypass = true;
+        try {
+            m.setAccessible(true);
+            m.invoke(self, args);
+        } catch (Throwable t) {
+            ElasticCard.log("cortina fechar: " + t);
+        } finally {
+            bypass = false;
+        }
+    }
+
+    /** A cortina sobe (do jeito dela) e, no fim, o sistema fecha a central de uma vez, já fora da tela. */
+    static void slideUp(final Runnable then) {
+        final View v = panel == null ? null : panel.get();
+        if (v == null) { then.run(); return; }
+        if (sliding) return;
+        sliding = true;
+        final float h = v.getHeight() > 0 ? v.getHeight() : v.getResources().getDisplayMetrics().heightPixels;
+        if (slideAnim != null) slideAnim.cancel();
+        slideAnim = android.animation.ValueAnimator.ofFloat(shown, 0f);
+        slideAnim.setDuration((long) Math.max(180, 320 * shown));
+        slideAnim.setInterpolator(new android.view.animation.PathInterpolator(0.3f, 0f, 0.2f, 1f));
+        slideAnim.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
+            public void onAnimationUpdate(android.animation.ValueAnimator a) {
+                shown = (Float) a.getAnimatedValue();
+                v.setTranslationY(-(1f - shown) * h);
+            }
+        });
+        slideAnim.addListener(new android.animation.AnimatorListenerAdapter() {
+            public void onAnimationEnd(android.animation.Animator a) {
+                v.setAlpha(0f);   // já fora da tela; a saída da central original não aparece
+                postSlide = true;
+                postMinF = 1f;
+                postSlideAt = android.os.SystemClock.uptimeMillis();
+                nDownShown = 0f;
+                sliding = false;
+                then.run();
+                v.postDelayed(new Runnable() {
+                    public void run() {
+                        if (postSlide) { postSlide = false; nativeOffHidden(v); }
+                    }
+                }, 1600);
+            }
+        });
+        slideAnim.start();
+        if (closeLogs++ < 30) ElasticCard.log("cortina: subindo antes de a central fechar (de " + shown + ")");
+    }
+
+    static int closeLogs;
+
+    static float expandHeight() {
+        try {
+            return ((Number) expandCtl.getClass().getMethod("getExpandHeight").invoke(expandCtl)).floatValue();
+        } catch (Throwable t) {
+            return Float.NaN;
+        }
+    }
+
+    static java.lang.reflect.Field fExpH;
+    static Object npvcRef;
+
+    /** NotificationPanelViewController.mExpandedHeight: quanto a central está aberta, em pixels. */
+    static float expandedPx() {
+        try {
+            if (npvcRef == null) {
+                Object lz = Refl.get(expandCtl, "panelViewController");
+                npvcRef = lz.getClass().getMethod("get").invoke(lz);
+            }
+            if (fExpH == null) {
+                fExpH = Refl.field(npvcRef.getClass(), "mExpandedHeight");
+                fExpH.setAccessible(true);
+            }
+            return fExpH.getFloat(npvcRef);
+        } catch (Throwable t) {
+            if (nativeLogs++ < 6) ElasticCard.log("cortina: altura da central indisponível: " + t);
+            return Float.NaN;
+        }
+    }
+
+    /** Começo da abertura do sistema: o visual da cortina entra, escondido acima da tela. */
+    static void beginNative(View v) {
+        closingWait = false;
+        if ((splitTx || splitLp != null) && nssl != null) splitOff(nssl);
+        if (v.getAlpha() != 1f) v.setAlpha(1f);
+        float h = v.getHeight() > 0 ? v.getHeight() : v.getResources().getDisplayMetrics().heightPixels;
+        on = true;
+        v.setTranslationY(-h);
+        if (!Prefs.sheetBlur) background(v);
+        follow(v, 0f, 1f);
+        deco(v, true);
+        hookPreDraw(v);
+        round(v);
+        if (!Prefs.sheetBlur) hideMiui(v);
+        layoutList(v, true);
+    }
+
     static void apply(float f) {
         // a abertura agora é do nosso gesto; aqui só encerra quando a central fecha de outro jeito
         final View v = panel == null ? null : panel.get();
         if (v == null) return;
         lastF = f;
         if (switchingNow) return;   // troca lateral: quem decide é o fim da troca
+        if (NATIVE) {
+            nativeFollow(v, f);
+            return;
+        }
         if (on && f <= 0f && !dragging && !animating) {
             if (closingWait) finishClose(v);
             else off(v);
@@ -454,7 +937,7 @@ final class ShadeSheet {
     /** Rolagem atual da lista (px), só leitura. */
     static int scrollY() {
         try {
-            if (nssl == null || !on) return 0;
+            if (nssl == null || !sheet()) return 0;
             return Math.max(0, ((Integer) Refl.call(nssl, "getOwnScrollY")).intValue());
         } catch (Throwable t) {
             return 0;
@@ -508,7 +991,7 @@ final class ShadeSheet {
                         landMoved = false;
                         resetLandFrom(p.thisObject);
                         int e = Math.round(CurtainClock.e) + listExtra;
-                        if (!on || e <= 0) {
+                        if (!sheet() || e <= 0) {
                             titleExtra = 0;
                             return;
                         }
@@ -615,7 +1098,7 @@ final class ShadeSheet {
                         return;
                     }
                     int e = Math.round(CurtainClock.e) + listExtra + playerGap;
-                    if (on && e > 0 && !landNow) p.setResult(Integer.valueOf(((Integer) p.getResult()).intValue() + e));
+                    if (sheet() && e > 0 && !landNow) p.setResult(Integer.valueOf(((Integer) p.getResult()).intValue() + e));
                 }
             });
             // sem o elástico do fim da lista na cortina: ao chegar no topo ou no fim, a lista (com o
@@ -829,6 +1312,7 @@ final class ShadeSheet {
      * decidir que é a central de notificações (e não o centro de controle). A cortina assume aqui.
      */
     static void hookExternal(ClassLoader cl) {
+        if (NATIVE) return;   // gestos do sistema
         try {
             Class inj = Class.forName("com.android.systemui.shade.NotificationPanelViewControllerInjector", false, cl);
             XposedBridge.hookMethod(inj.getDeclaredMethod("handleExternalTouch", android.view.MotionEvent.class), new XC_MethodHook() {
@@ -867,6 +1351,7 @@ final class ShadeSheet {
     static int extLogs;
 
     static void hookSources(ClassLoader cl) {
+        if (NATIVE) return;   // gestos do sistema
         try {
             final Class sb = Class.forName("com.android.systemui.statusbar.phone.PhoneStatusBarView", false, cl);
             XposedBridge.hookMethod(ViewGroup.class.getDeclaredMethod("dispatchTouchEvent", android.view.MotionEvent.class), new XC_MethodHook() {
@@ -1745,7 +2230,9 @@ final class ShadeSheet {
                 }
             });
         }
-        XposedBridge.hookMethod(sw.getDeclaredMethod("isSwitchable"), new XC_MethodHook() {
+        java.lang.reflect.Method isSw;
+        try { isSw = sw.getDeclaredMethod("isSwitchable"); } catch (NoSuchMethodException e) { isSw = sw.getDeclaredMethod("getSwitchable"); }
+        XposedBridge.hookMethod(isSw, new XC_MethodHook() {
             protected void beforeHookedMethod(MethodHookParam p) {
                 swCtl = p.thisObject;
                 View v = panel == null ? null : panel.get();
@@ -1764,6 +2251,17 @@ final class ShadeSheet {
                     View v = panel == null ? null : panel.get();
                     if (!z || v == null || !Prefs.shadeSheet || locked(v)) return;
                     switchingNow = true;
+                    if (NATIVE) {
+                        // troca lateral: a central entra/sai de lado, sem a cortina descer de novo
+                        if (slideAnim != null) { slideAnim.removeAllListeners(); slideAnim.cancel(); } sliding = false;
+                        pending.clear();
+                        nOn = true; shown = 1f; postSlide = false;
+                        if (v.getTranslationY() != 0f) v.setTranslationY(0f);
+                        natDecoOn(v);
+                        if (v.getAlpha() != 1f) v.setAlpha(1f);
+                        if (swLogs2++ < 4) ElasticCard.log("cortina: troca lateral (sem descer de novo)");
+                        return;
+                    }
                     boolean cc = swBool("getControlCenterExpanded"), nt = swBool("getNotificationExpanded");
                     if (!on && cc && !nt) {
                         enterInPlace(v);
@@ -1779,6 +2277,31 @@ final class ShadeSheet {
                     if (Boolean.TRUE.equals(p.args[0]) || !switchingNow) return;
                     switchingNow = false;
                     final View v = panel == null ? null : panel.get();
+                    if (NATIVE) {
+                        if (v == null) return;
+                        // o estado de qual central ficou aberta só se acerta logo depois do fim da troca
+                        // HyperOS 3: no fim da troca, "toCtrl" diz para onde ela foi (o HyperOS esconde a outra)
+                        Boolean tc = null;
+                        try { java.lang.reflect.Field ft = Refl.field(p.thisObject.getClass(), "toCtrl"); if (ft != null) tc = Boolean.valueOf(ft.getBoolean(p.thisObject)); } catch (Throwable ignored) { }
+                        final boolean toNotif = tc != null ? !tc.booleanValue() : (swBool("getNotificationExpanded") && !swBool("getControlCenterExpanded"));
+                        if (swLogs2++ < 12) ElasticCard.log("cortina: fim da troca lateral → " + (toNotif ? "notificações" : "centro de controle") + " (toCtrl=" + tc + ")");
+                        v.postDelayed(new Runnable() {
+                            public void run() {
+                                if (switchingNow) return;
+                                if (toNotif) {
+                                    nOn = true; shown = 1f; postSlide = false;
+                                    if (v.getTranslationY() != 0f) v.setTranslationY(0f);
+                                    if (v.getAlpha() != 1f) v.setAlpha(1f);
+                                    natDecoOn(v);
+                                    follow(v, 0f, 1f);
+                                } else {
+                                    follow(v, 0f, 1f);
+                                    nativeOff(v);
+                                }
+                            }
+                        }, 0);
+                        return;
+                    }
                     if (v == null || !on) return;
                     follow(v, 0f, 1f);
                     if (!swBool("getNotificationExpanded")) off(v);   // terminou no centro de controle
@@ -1793,7 +2316,7 @@ final class ShadeSheet {
         XposedBridge.hookMethod(nw.getDeclaredMethod("updateTransX"), new XC_MethodHook() {
             protected void afterHookedMethod(MethodHookParam p) {
                 try {
-                    if (!on || !switchingNow || fId.getInt(p.thisObject) != 0) return;
+                    if (!sheet() || !switchingNow || fId.getInt(p.thisObject) != 0) return;
                     Object sh = fShade.get(p.thisObject);
                     View c = (View) sh.getClass().getMethod("getContainer").invoke(sh);
                     View v = panel == null ? null : panel.get();
@@ -1982,7 +2505,7 @@ final class ShadeSheet {
 
     /** O degradê do cabeçalho do HyperOS ganha um segundo trecho embaixo: do nítido ao desfocado até o corte. */
     static float[] withBottom(View v, float[] b) {
-        if (!on || Float.isNaN(bottomCutWin) || b.length != 6) return b;
+        if (!sheet() || Float.isNaN(bottomCutWin) || b.length != 6) return b;
         int[] l = new int[2];
         v.getLocationInWindow(l);
         float d = v.getResources().getDisplayMetrics().density;
@@ -1995,7 +2518,7 @@ final class ShadeSheet {
     static void bottomBlur(View deco) {
         try {
             View host = nssl;
-            float lim = host == null || !on ? Float.NaN : buttonLimit(host);
+            float lim = host == null || !sheet() ? Float.NaN : buttonLimit(host);
             float cut = Float.NaN;
             if (!Float.isNaN(lim)) {
                 int[] hl = new int[2];
@@ -2084,7 +2607,7 @@ final class ShadeSheet {
                     gradOrig.put(v, a.clone());
                     gradShift.put(v, Integer.valueOf(0));
                     if (gradLogs++ < 3) ElasticCard.log("cortina: degradê do cabeçalho em " + v.getClass().getName() + " " + java.util.Arrays.toString(a));
-                    if (on) {
+                    if (sheet()) {
                         int s = shiftNow;
                         float[] b = a.clone();
                         b[1] += s;
@@ -2163,7 +2686,7 @@ final class ShadeSheet {
     /** A lista não passa por baixo do relógio: corta acima da linha "Notificações". */
     static void clipList(float windowY) {
         try {
-            if (nssl == null || !on) return;
+            if (nssl == null || !sheet()) return;
             int[] l = new int[2];
             nssl.getLocationInWindow(l);
             int top = Math.max(0, Math.round(windowY - l[1] - nssl.getTranslationY()));
@@ -2227,13 +2750,14 @@ final class ShadeSheet {
                 try {
                     if (!on && Prefs.shadeSheet && locked(v) && (Kg.snapL == null || android.os.SystemClock.uptimeMillis() - Kg.snapAt > 30000)) Kg.snapBottom(v);   // copia os botões do bloqueio
                     Kg.fadeGlass(v);   // o vidro do relógio/título não segue o painel: some junto com ele
-                    if (on) {
+                    if (NATIVE && nOn && !switchingNow) nativeFollow(v, lastF);   // a altura segue o dedo a cada quadro
+                    if (on || (NATIVE && nOn && natDeco)) {
                         layoutList(v, true);
                         if (decoV != null) {   // relógio e título acompanham cada quadro da rolagem (inclusive a volta ao topo)
                             int sc = scrollY();
                             if (sc != lastSc) { lastSc = sc; decoV.invalidate(); }
                         }
-                        if (!enabled(v)) off(v);
+                        if (!enabled(v)) { if (on) off(v); }
                         else {
                             if (!Prefs.sheetBlur && !switchingNow) for (View x : hidden) if (x.getAlpha() != 0f) x.setAlpha(0f);
                             if (hdr != null && hdr.getAlpha() != 0f) hdr.setAlpha(0f);
