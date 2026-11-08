@@ -40,6 +40,9 @@ final class Explicit {
     static final class Badge extends Drawable {
         final Paint box = new Paint(Paint.ANTI_ALIAS_FLAG), letter = new Paint(Paint.ANTI_ALIAS_FLAG);
         final RectF r = new RectF();
+        final android.graphics.Path cut = new android.graphics.Path(), glyph = new android.graphics.Path();
+        final Paint vib = new Paint(Paint.ANTI_ALIAS_FLAG);
+        android.view.View host;   // com host: vibrance como o artista (Prefs.mediaVibPlus)
         int size;
 
         Badge(float textSize, int textColor) {
@@ -63,9 +66,24 @@ final class Explicit {
             float s = Math.min(b.width(), b.height());
             float x = b.left + (b.width() - s) / 2f, y = b.top + (b.height() - s) / 2f;
             r.set(x, y, x + s, y + s);
-            c.drawRoundRect(r, s * 0.16f, s * 0.16f, box);
             letter.setTextSize(s * 0.74f);
-            c.drawText("E", r.centerX(), r.centerY() - (letter.ascent() + letter.descent()) / 2f, letter);
+            float by = r.centerY() - (letter.ascent() + letter.descent()) / 2f;
+            if (host != null && Prefs.mediaVibPlus) {
+                // vibrance: o quadrado soma luz (escuro) ou escurece (claro) o que está atrás, e o "E" é
+                // um recorte nele, mostrando o fundo do cartão como no artista
+                boolean night = MediaCut.night(host);
+                cut.reset();
+                cut.addRoundRect(r, s * 0.16f, s * 0.16f, android.graphics.Path.Direction.CW);
+                glyph.reset();
+                letter.getTextPath("E", 0, 1, r.centerX(), by, glyph);
+                cut.op(glyph, android.graphics.Path.Op.DIFFERENCE);
+                vib.setBlendMode(MediaCut.mode(night));
+                vib.setColor(MediaCut.color(night, Prefs.mvExtra));
+                c.drawPath(cut, vib);
+                return;
+            }
+            c.drawRoundRect(r, s * 0.16f, s * 0.16f, box);
+            c.drawText("E", r.centerX(), by, letter);
         }
 
         public void setAlpha(int a) {}
@@ -98,6 +116,7 @@ final class Explicit {
     static void watch(final TextView tv) {
         if (tv.getTag(TAG) != null) return;
         final Badge badge = new Badge(tv.getTextSize(), tv.getCurrentTextColor());
+        badge.host = tv;
         tv.setTag(TAG, badge);
         tv.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
             long at;

@@ -118,8 +118,8 @@ private val Categories = listOf(
     "Gaveta e pilhas" to "Empilhamento e grupos em pilha",
     "Tela de bloqueio" to "Lista, relógio e rolagem",
     "Central estilo iOS" to "Cortina, relógio do bloqueio e fundo",
-    "Barra de status" to "Pílulas do relógio e cores",
-    "Música" to "Player da gaveta e brilho da capa",
+    "Barra de status" to "Pílulas do relógio, Instagram e Gboard",
+    "Música" to "Player, capa e letras",
     "Privacidade" to "Esconder apps e conversas",
 )
 
@@ -617,7 +617,7 @@ private fun LazyListScope.homeTab(store: Store, backdrop: LayerBackdrop?, contex
 
 private fun LazyListScope.headsUpPage(store: Store, backdrop: LayerBackdrop?, context: Context) {
     section("hu", "Heads-up", backdrop) {
-        Toggle(store.huEnabled, "Efeito ativado", "A notificação aparece com a animação do estilo escolhido.")
+        Toggle(store.huEnabled, "Efeito ativado", "Anima a notificação no estilo escolhido.")
         AnimatedVisibility(visible = store.huEnabled.value) {
             Column {
                 val ios = store.huStyle.value == 1
@@ -631,17 +631,11 @@ private fun LazyListScope.headsUpPage(store: Store, backdrop: LayerBackdrop?, co
                         selectedBackgroundColor = MiuixTheme.colorScheme.surface,
                     ),
                 )
-                CardText(
-                    if (ios) {
-                        "Nasce do ícone do app na barra de status, cresce desfocando e, ao sair, volta para ele."
-                    } else {
-                        "Nasce da ilha e cresce até o lugar dela, com a mola do OriginOS."
-                    },
-                )
+                CardText(if (ios) "Nasce do ícone na barra de status e volta para ele." else "Nasce da ilha com a mola do OriginOS.")
                 val speed = if (ios) store.huIosSpeed else store.huSpeed
                 val bounce = if (ios) store.huIosBounce else store.huBounce
-                IntSlider(speed, "Velocidade", "Mais rápido encurta a animação; mais lento estica.", 50, 200, "%")
-                IntSlider(bounce, "Bounce", "0% chega sem passar do ponto; 200% dá o dobro de pulo.", 0, 200, "%")
+                IntSlider(speed, "Velocidade", "Mais alto é mais rápido.", 50, 200, "%")
+                IntSlider(bounce, "Bounce", "Quanto a animação passa do ponto.", 0, 200, "%")
                 ArrowPreference(
                     title = tr("Testar heads-up"),
                     summary = tr("Teste ${if (ios) "iOS" else "OriginOS"}: velocidade ${speed.live}% · bounce ${bounce.live}%"),
@@ -673,36 +667,38 @@ private fun LazyListScope.headsUpPage(store: Store, backdrop: LayerBackdrop?, co
     }
     section("hc", "Conteúdo da heads-up", backdrop) {
         if (store.huStyle.value == 1) {
-            Toggle(store.barOn, "Barrinha de notificações", "Depois que a heads-up recua, fica uma barrinha abaixo do relógio avisando que há notificações. Some ao abrir a central.")
-            IntSlider(store.barDx, "Barrinha (iOS): para o lado", "Move a barrinha para a esquerda ou para a direita, a partir do relógio.", -80, 80, " dp", step = 1)
-            IntSlider(store.barDy, "Barrinha (iOS): altura na tela", "Sobe ou desce a barrinha, a partir do fim da barra de status.", -30, 60, " dp", step = 1)
-            IntSlider(store.barW, "Barrinha (iOS): largura", "Comprimento da barrinha.", 10, 90, " dp", step = 1)
-            IntSlider(store.barH, "Barrinha (iOS): espessura", "Altura da barrinha.", 2, 14, " dp", step = 1)
-            IntSlider(store.barA, "Barrinha (iOS): opacidade", "Quanto a barrinha aparece.", 10, 100, "%", step = 1)
+            Toggle(store.barOn, "Barrinha de notificações", "Uma barrinha abaixo do relógio avisa que há notificações.")
+            if (store.barOn.value) {
+                IntSlider(store.barDx, "Barrinha (iOS): para o lado", "Posição lateral.", -80, 80, " dp", step = 1)
+                IntSlider(store.barDy, "Barrinha (iOS): altura na tela", "Posição vertical.", -30, 60, " dp", step = 1)
+                IntSlider(store.barW, "Barrinha (iOS): largura", "Comprimento da barrinha.", 10, 90, " dp", step = 1)
+                IntSlider(store.barH, "Barrinha (iOS): espessura", "Altura da barrinha.", 2, 14, " dp", step = 1)
+                IntSlider(store.barA, "Barrinha (iOS): opacidade", "Quanto a barrinha aparece.", 10, 100, "%", step = 1)
+            }
         }
-        Toggle(store.huNoActions, "Sem botões", "Recolhida, mostra só título e texto. Os botões aparecem ao expandir. Ligações e alarmes mantêm os botões. No HyperOS 4, a seta de expandir e a barrinha de janela flutuante ficam invisíveis, mas continuam funcionando.")
-        Toggle(store.huSeparate, "Uma por notificação", "Mostra só a notificação nova, sem juntar com as anteriores do app.")
+        Toggle(store.huNoActions, "Sem botões", "Recolhida, mostra só título e texto.")
+        Toggle(store.huSeparate, "Uma por notificação", "Mostra só a notificação nova, sem as anteriores.")
     }
 }
 
 private fun LazyListScope.notificationsPage(store: Store, backdrop: LayerBackdrop?) {
     section("tx", "Texto", backdrop) {
-        Toggle(store.modalFull, "Mensagem inteira ao segurar", "Ao segurar uma notificação, o cartão mostra a mensagem completa, com rolagem.")
-        Toggle(store.lines4, "Mais linhas de texto", "Os cartões da central mostram mais linhas da mensagem. Num grupo em pilha ficam com 3. A heads-up continua igual.")
-        IntSlider(store.linesN, "Linhas de texto", "Quantas linhas os cartões da central mostram.", 2, 10, "", step = 1)
+        Toggle(store.modalFull, "Mensagem inteira ao segurar", "Segure a notificação para ler a mensagem completa.")
+        Toggle(store.lines4, "Mais linhas de texto", "Os cartões da central mostram mais linhas.")
+        if (store.lines4.value) IntSlider(store.linesN, "Linhas de texto", "Quantas linhas os cartões da central mostram.", 2, 10, "", step = 1)
     }
     section("cc", "Notificações de conversa", backdrop) {
-        Toggle(store.convTime, "Hora das conversas no canto", "A hora vai para o canto direito, como nos outros cartões. Até 1 hora mostra \"agora\" ou \"5 min\".")
-        Toggle(store.convNoExpand, "Conversas sem a seta", "Esconde o botão de expandir. Puxe a notificação para expandir.")
-        Toggle(store.convMiui, "Conversas no visual do HyperOS (teste)", "Monta as conversas como os outros cartões do HyperOS: foto, nome, última mensagem e hora no canto.")
-        Toggle(store.convSplit, "Cada mensagem num cartão novo (teste)", "Como no iOS: cada mensagem nova vira um cartão. Precisa de \"Framework do sistema\" no escopo do LSPosed.")
-        Toggle(store.convSender, "Grupos só com o nome de quem mandou (teste)", "Em grupos, o título mostra só quem mandou. Precisa de \"Framework do sistema\" no escopo.")
+        Toggle(store.convTime, "Hora das conversas no canto", "A hora vai para o canto direito.")
+        Toggle(store.convNoExpand, "Conversas sem a seta", "Esconde o botão de expandir; puxe para abrir.")
+        Toggle(store.convMiui, "Conversas no visual do HyperOS (teste)", "Conversas no mesmo visual dos outros cartões.")
+        Toggle(store.convSplit, "Cada mensagem num cartão novo (teste)", "Cada mensagem vira um cartão (precisa do Framework do sistema no escopo).")
+        Toggle(store.convSender, "Grupos só com o nome de quem mandou (teste)", "O título mostra só quem mandou (precisa do Framework do sistema no escopo).")
         CardText("Valem para as notificações novas ou atualizadas.")
     }
     section("vi", "Visual dos cartões", backdrop) {
-        Toggle(store.bodyVib, "Texto das notificações com vibrance", "O conteúdo das notificações (menos o título) ganha o efeito vibrancy, como os tempos do player.")
-        IntSlider(store.bodyVibN, "Intensidade do texto", "Quanto o texto clareia (escuro) ou escurece (claro) o vidro do cartão.", 0, 100, "%")
-        Toggle(store.notifVib, "Hora das notificações como no iOS (teste)", "A hora das notificações ganha o mesmo efeito vibrancy, com a intensidade dos números do player.")
+        Toggle(store.bodyVib, "Texto das notificações com vibrance", "O texto ganha o efeito vibrancy.")
+        if (store.bodyVib.value) IntSlider(store.bodyVibN, "Intensidade do texto", "Força do efeito.", 0, 100, "%")
+        Toggle(store.notifVib, "Hora das notificações como no iOS (teste)", "A hora ganha o efeito vibrancy.")
     }
 }
 
@@ -711,18 +707,20 @@ private fun LazyListScope.stacksPage(store: Store, backdrop: LayerBackdrop?) {
         Toggle(store.stEnabled, "Empilhar notificações", "As que passam do limite encolhem embaixo, como no HyperOS 4.")
         IntSlider(store.stOffset, "Limite acima do fim da tela", "Maior começa a pilha mais alto.", 0, 400, " dp", step = 2)
         Toggle(store.stGroups, "Grupos expandidos por cartão", "Cada notificação de um grupo aberto empilha separada.")
-        Toggle(store.landSplit, "Player ao lado em paisagem", "Na gaveta em paisagem, com música e notificações, o player fica numa coluna à esquerda e as notificações à direita.")
-        Toggle(store.groupStack, "Grupos em pilha (teste)", "Notificações do mesmo app viram uma pilha de cartões. Toque para abrir; a seta empilha de novo.")
-        IntSlider(store.gsSpeed, "Pilha: velocidade", "Mais alto é mais rápido.", 50, 200, "%")
-        IntSlider(store.gsBounce, "Pilha: bounce", "0% sem pulo; 300% pula bem mais.", 0, 300, "%")
-        IntSlider(store.gsDepth, "Pilha: profundidade", "Quanto os cartões de trás aparecem.", 4, 30, " dp", step = 1)
-        IntSlider(store.gsShadow, "Pilha: sombra entre os cartões", "Sombra suave entre os cartões. 0% tira.", 0, 100, "%")
+        Toggle(store.landSplit, "Player ao lado em paisagem", "Em paisagem, o player fica à esquerda e as notificações à direita.")
+        Toggle(store.groupStack, "Grupos em pilha (teste)", "Notificações do mesmo app viram uma pilha.")
+        if (store.groupStack.value) {
+            IntSlider(store.gsSpeed, "Pilha: velocidade", "Mais alto é mais rápido.", 50, 200, "%")
+            IntSlider(store.gsBounce, "Pilha: bounce", "Quanto a pilha pula.", 0, 300, "%")
+            IntSlider(store.gsDepth, "Pilha: profundidade", "Quanto os cartões de trás aparecem.", 4, 30, " dp", step = 1)
+            IntSlider(store.gsShadow, "Pilha: sombra entre os cartões", "Sombra entre os cartões.", 0, 100, "%")
+        }
     }
 }
 
 private fun LazyListScope.lockPage(store: Store, backdrop: LayerBackdrop?, askCalendar: () -> Unit) {
     section("kg", "Tela de bloqueio", backdrop) {
-        Toggle(store.kgHmc, "Bloqueio com o HyperMusicCover", "Relógio, capa, player e ilha do bloqueio usam o HyperMusicCover (precisa da extensão, veja Extensões).")
+        Toggle(store.kgHmc, "Bloqueio com o HyperMusicCover", "O bloqueio usa o relógio, a capa e o player do HyperMusicCover.")
         Toggle(store.kgKeep, "Manter notificações após desbloquear", "As notificações vistas continuam no bloqueio até serem apagadas.")
         Toggle(store.kgEnabled, "Empilhar no bloqueio", "Mostra todas as notificações e empilha as que passam do limite.")
         Toggle(store.kgScroll, "Rolar sem desbloquear", "Deslizar sobre as notificações rola a lista; fora delas, desbloqueia.")
@@ -730,97 +728,258 @@ private fun LazyListScope.lockPage(store: Store, backdrop: LayerBackdrop?, askCa
         Toggle(store.kgClock, "Relógio acompanha a rolagem", "Ao rolar, as notificações empurram o relógio para cima.")
         Toggle(store.kgBlur, "Desfoque no topo", "As notificações se desfocam ao passar sob a barra de status.")
         Toggle(store.kgIos, "Lista baixa (estilo iOS)", "A lista começa mais embaixo, perto do polegar.")
-        IntSlider(store.kgStart, "Início da lista", "Onde o primeiro cartão começa com muitas notificações.", 25, 90, "%", step = 1)
+        if (store.kgIos.value) IntSlider(store.kgStart, "Início da lista", "Onde o primeiro cartão começa com muitas notificações.", 25, 90, "%", step = 1)
         IntSlider(store.kgOffset, "Limite acima do fim da tela", "Deixe espaço para o cadeado e os atalhos de baixo.", 40, 500, " dp")
-        Toggle(store.kgHide, "Puxar para empilhar (teste)", "Com a lista no topo, continue rolando: as notificações se empilham até sobrar o player.")
+        Toggle(store.kgHide, "Puxar para empilhar (teste)", "Role além do topo para empilhar as notificações.")
         CardText("Vale na próxima vez que a tela bloquear.")
     }
     section("lw", "Widgets do bloqueio", backdrop) {
         Toggle(store.lockWidgets, "Widgets no bloqueio", "Uma fileira de widgets no estilo iOS acima da lanterna e da câmera.")
-        Toggle(store.lwAgenda, "Agenda e alarme", "Próximo evento da agenda e próximo alarme.")
-        Toggle(store.lwBattery, "Bateria", "Nível da bateria, verde carregando.")
-        Toggle(store.lwWeather, "Clima", "Temperatura do app de clima da Xiaomi.")
-        Toggle(store.lwSteps, "Passos", "Passos do dia (app Mi Fitness).")
-        ArrowPreference(title = tr("Permitir acesso à agenda"), onClick = askCalendar)
+        if (store.lockWidgets.value) {
+            Toggle(store.lwAgenda, "Agenda e alarme", "Próximo evento da agenda e próximo alarme.")
+            Toggle(store.lwBattery, "Bateria", "Nível da bateria, verde carregando.")
+            Toggle(store.lwWeather, "Clima", "Temperatura do app de clima da Xiaomi.")
+            Toggle(store.lwSteps, "Passos", "Passos do dia (app Mi Fitness).")
+            ArrowPreference(title = tr("Permitir acesso à agenda"), onClick = askCalendar)
+        }
     }
 }
 
 private fun LazyListScope.curtainPage(store: Store, backdrop: LayerBackdrop?) {
     section("ios", "Cortina", backdrop) {
-        Toggle(store.shadeSheet, "Central em cortina (teste)", "A central desce do topo como uma cortina, com o fundo do bloqueio, relógio grande, lanterna e câmera. Desligado = central do HyperOS.")
-        Toggle(store.islandHide, "Esconder a ilha ao puxar a central (teste)", "Com a ilha de música ativa, a puxada da central pode engasgar. Enquanto a central está aberta, a ilha fica escondida e volta quando ela fecha.")
-        Toggle(store.sheetPlayerFree, "Player rola com a lista", "Na cortina, o player deixa de ficar fixo abaixo do relógio e rola junto com as notificações. Use se outro módulo (como o HyperTweak) também mexer no player.")
-        Toggle(store.sheetRound, "Cantos arredondados na cortina", "Arredonda a borda de baixo da cortina enquanto ela se move.")
-        Toggle(store.sheetBlur, "Fundo desfocado", "Usa o desfoque do HyperOS (a tela de trás desfocada). Desligado = papel de parede do bloqueio.")
+        Toggle(store.shadeSheet, "Central em cortina (teste)", "A central desce do topo como uma cortina.")
+        Toggle(store.islandHide, "Esconder a ilha ao puxar a central (teste)", "Esconde a ilha de música enquanto a central está aberta.")
+        Toggle(store.sheetPlayerFree, "Player rola com a lista", "O player rola junto com as notificações.")
+        Toggle(store.sheetRound, "Cantos arredondados na cortina", "Arredonda a borda de baixo da cortina.")
+        Toggle(store.sheetBlur, "Fundo desfocado", "Desfoca a tela de trás; desligado usa o papel de parede.")
     }
     section("ck", "Relógio da cortina", backdrop) {
-        Toggle(store.sheetLockClock, "Relógio do bloqueio na cortina (teste)", "Usa o mesmo modelo de relógio da tela de bloqueio (troca junto quando você muda o modelo). Alguns modelos sobem e encolhem ao rolar as notificações.")
-        IntSlider(store.sheetClock, "Posição do relógio", "Quanto o relógio próprio da cortina (e a lista) descem a partir do topo. Não vale com o relógio do bloqueio.", 0, 240, " dp")
+        Toggle(store.sheetLockClock, "Relógio do bloqueio na cortina (teste)", "Usa o mesmo relógio da tela de bloqueio.")
+        if (!store.sheetLockClock.value) IntSlider(store.sheetClock, "Posição do relógio", "Quanto o relógio e a lista descem.", 0, 240, " dp")
     }
 }
 
 private fun LazyListScope.statusBarPage(store: Store, backdrop: LayerBackdrop?) {
-    section("ig", "Instagram", backdrop) {
-        Toggle(store.igGlass, "Barra de abas de vidro no Instagram (teste)", "A barra de baixo do Instagram vira uma pílula de vidro flutuante, com o feed passando por trás. Precisa do Instagram marcado no escopo do LSPosed.")
-    }
-    section("kb", "Teclado", backdrop) {
-        Toggle(store.kbBlur, "Gboard desfocado (teste)", "O fundo do Gboard fica transparente com o desfoque do sistema atrás. Precisa do Gboard marcado no escopo do LSPosed e de reabrir o teclado.")
-        if (store.kbBlur.value) {
-            IntSlider(store.kbBlurR, "Intensidade do desfoque", "Quanto o fundo atrás do teclado fica borrado.", 0, 150, "")
-            IntSlider(store.kbBlurA, "Cor do fundo", "Quanto da cor original do teclado fica por cima do desfoque. Mais alto deixa as teclas mais legíveis.", 0, 100, "%")
-            IntSlider(store.kbKeysA, "Vidro das teclas", "Força do vidro claro nas teclas. Mais baixo deixa as teclas mais transparentes; 100% mantém as cores do tema do Gboard.", 10, 100, "%")
-            val kbCtx = LocalContext.current
-            ArrowPreference(
-                title = tr("Reiniciar o Gboard"),
-                summary = tr("Fecha o Gboard para ele abrir de novo com os ajustes novos (as cores das teclas só mudam assim)."),
-                onClick = { Bridge.call(kbCtx, "kbrestart"); toast(kbCtx, "O Gboard vai abrir de novo com os ajustes novos.") },
-            )
-        }
-    }
     section("pl", "Pílulas do relógio", backdrop) {
-        Toggle(store.recPill, "Relógio vermelho ao gravar a tela", "Durante a gravação de tela, o relógio da barra de status ganha uma pílula vermelha, como no iOS.")
-        Toggle(store.locPill, "Relógio azul com a localização em uso", "Quando algum app está usando a localização, o relógio ganha uma pílula azul.")
-        Toggle(store.hotPill, "Relógio verde com o roteador ligado", "Com o roteador Wi-Fi (hotspot) ligado, o relógio ganha uma pílula verde.")
-        Toggle(store.pillVib, "Vibrance na pílula do relógio", "Com uma pílula atrás, a hora vira um recorte e deixa ver o que está passando na tela.")
+        Toggle(store.recPill, "Relógio vermelho ao gravar a tela", "Pílula vermelha no relógio durante a gravação.")
+        Toggle(store.locPill, "Relógio azul com a localização em uso", "Pílula azul no relógio com a localização em uso.")
+        Toggle(store.hotPill, "Relógio verde com o roteador ligado", "Pílula verde no relógio com o roteador ligado.")
+        Toggle(store.pillVib, "Vibrance na pílula do relógio", "A hora vira um recorte na pílula.")
     }
     section("co", "Cores das pílulas", backdrop) {
         ColorChoice(store.recColor, "Cor da gravação")
         ColorChoice(store.locColor, "Cor da localização")
         ColorChoice(store.hotColor, "Cor do roteador")
     }
+    section("ig", "Instagram", backdrop) {
+        Toggle(store.igGlass, "Barra de abas de vidro no Instagram (teste)", "A barra de baixo vira uma pílula de vidro (marque o Instagram no escopo).")
+        if (store.igGlass.value) {
+            OverlayDropdownPreference(
+                title = tr("Estilo do vidro"),
+                items = listOf(tr("Líquido"), tr("Fosco")),
+                selectedIndex = store.igGlassStyle.value,
+                onSelectedIndexChange = { store.igGlassStyle.value = it },
+            )
+        }
+    }
+    section("kb", "Teclado", backdrop) {
+        Toggle(store.kbBlur, "Gboard desfocado (teste)", "O fundo do Gboard fica de vidro (marque o Gboard no escopo).")
+        if (store.kbBlur.value) {
+            IntSlider(store.kbBlurR, "Intensidade do desfoque", "Quanto o fundo fica borrado.", 0, 150, "")
+            IntSlider(store.kbBlurA, "Cor do fundo", "Quanto da cor do teclado fica por cima.", 0, 100, "%")
+            IntSlider(store.kbKeysA, "Vidro das teclas", "Mais baixo deixa as teclas mais transparentes.", 10, 100, "%")
+            val kbCtx = LocalContext.current
+            ArrowPreference(
+                title = tr("Reiniciar o Gboard"),
+                summary = tr("Aplica as cores novas das teclas."),
+                onClick = { Bridge.call(kbCtx, "kbrestart"); toast(kbCtx, "O Gboard vai abrir de novo com os ajustes novos.") },
+            )
+        }
+    }
 }
 
+/** As 8 fontes do Neon (assets do módulo) e os nomes delas. */
+private val NeonFiles = listOf("lyric_neon.ttf", "ln_tilt.ttf", "ln_sacra.ttf", "ln_dafoe.ttf", "ln_monoton.ttf", "lyric_neon_b.ttf", "ln_hair.ttf", "ln_audio.ttf")
+private val NeonNames = listOf("Pirata One", "Tilt Neon", "Sacramento", "Mr Dafoe", "Monoton", "Anton", "Bungee Hairline", "Audiowide")
+
 private fun LazyListScope.musicPage(store: Store, backdrop: LayerBackdrop?) {
-    section("pg", "Player da gaveta", backdrop) {
-        Toggle(store.playerIos, "Player da central no estilo ColorOS (teste)", "Na página de música e no detalhe do player da central (inclusive com o mod iOS26 Control Center): capa de ponta a ponta no topo que some num degradê, com título e artista no centro.")
-        Toggle(store.explicitE, "Selo E de conteúdo explícito", "Mostra o selo \"E\" (como no Spotify e no iOS) antes do título das músicas explícitas, no player do HyperOS e no player estilo ColorOS. Depende do app de música informar a marca de explícito.")
-        Toggle(store.mediaPure, "Fundo igual às notificações", "O player usa o mesmo vidro das outras notificações, em vez do mais escuro.")
-        Toggle(store.albumGlow, "Capa gira e brilha na troca", "Como no ColorOS 17: ao trocar a música, a capa gira e solta um brilho que se espalha pelo cartão.")
-        Toggle(store.glowSweep, "Brilho em onda de luz", "Como no ColorOS 17: uma onda de luz nasce na capa e se espalha pelo cartão, como uma gota na água. Desligado, a capa solta uma mancha desfocada. Posição e distância só valem para a mancha.")
-        IntSlider(store.glowPower, "Brilho: intensidade", "Quão forte o brilho aparece. Acima de 100% fica mais aceso que o padrão.", 10, 300, "%")
-        IntSlider(store.glowSize, "Brilho: tamanho", "Até onde ele se espalha em volta da capa.", 40, 200, "%")
-        IntSlider(store.glowDist, "Brilho: distância", "Quanto ele desce pelo cartão enquanto some.", 0, 250, "%")
-        IntSlider(store.glowX, "Brilho: posição lateral", "Para a esquerda (negativo) ou direita, em % da capa.", -150, 150, "%")
-        IntSlider(store.glowY, "Brilho: posição vertical", "Para cima (negativo) ou para baixo, em % da capa.", -100, 150, "%")
-        IntSlider(store.glowTime, "Brilho: duração", "Mais alto é mais lento.", 50, 250, "%")
-        Toggle(store.mediaEdge, "Título com as pontas desfocadas", "Nomes compridos rolam com as pontas desfocadas, em vez de cortadas.")
-        Toggle(store.cometBar, "Cometa na barra (teste)", "A barra do player fica fina e a parte tocada vai da cor da capa até uma ponta branca que brilha, como no iOS.")
-        IntSlider(store.cometThick, "Cometa: espessura da barra", "Grossura da barra com o cometa. 0 = igual à barra do sistema (sem mudar de tamanho ao pausar).", 0, 10, " dp", step = 1)
-        IntSlider(store.cometTail, "Cometa: tamanho da cauda", "Comprimento máximo da cauda. Ela nasce curta e cresce com a música até esse tamanho, abrindo em V para trás.", 20, 200, " dp")
-        IntSlider(store.cometFade, "Cometa: começo apagado", "Quanto o começo da parte tocada fica mais transparente. 0 deixa sólido.", 0, 100, "%")
-        IntSlider(store.cometGlow, "Cometa: brilho", "Quão forte a luz em volta da ponta aparece. 0 tira o brilho.", 0, 100, "%")
-        IntSlider(store.cometSize, "Cometa: tamanho do brilho", "Até onde a luz da ponta se espalha.", 50, 250, "%")
-        IntSlider(store.cometPulse, "Cometa: pulsar", "O brilho pulsa no ritmo de um segundo. 0 deixa fixo.", 0, 100, "%")
-        IntSlider(store.cometSparks, "Cometa: faíscas", "Pontinhos que ficam para trás enquanto toca. 0 tira.", 0, 10, "", step = 1)
-        Toggle(store.cometAuto, "Começo na cor da capa", "O começo da parte tocada pega a cor mais viva da capa, clareada. Desligado, a barra toda usa a cor da ponta.")
-        ColorChoice(store.cometColor, "Cor da ponta", withWhite = true)
-        Toggle(store.mediaCut, "Barra e tempos como no iOS (teste)", "A barra e os tempos ganham o efeito vibrancy do iOS, no tom do vidro.")
-        IntSlider(store.mvText, "iOS: intensidade dos números", "Quanto os tempos clareiam (escuro) ou escurecem (claro) o vidro.", 0, 100, "%")
-        IntSlider(store.mvTrack, "iOS: intensidade do trilho", "A parte da barra que ainda falta tocar.", 0, 100, "%")
-        Toggle(store.mediaVibPlus, "Vibrance no artista e nos botões (teste)", "O nome do artista e os botões de voltar e pular ganham o efeito vibrancy, como os tempos.")
-        IntSlider(store.mvExtra, "Artista e botões: intensidade", "Quanto clareiam (escuro) ou escurecem (claro) o vidro.", 0, 100, "%")
-        IntSlider(store.mvPlayed, "iOS: intensidade da parte tocada", "A parte da barra que já tocou.", 0, 100, "%")
+    section("pg", "Player", backdrop) {
+        Toggle(store.playerOrigin, "Player estilo OriginOS", "Capa grande à esquerda e controles embaixo, como no OriginOS.")
+        Toggle(store.playerIos, "Player da central no estilo ColorOS (teste)", "Capa de ponta a ponta que some num degradê.")
+        Toggle(store.mediaPure, "Fundo igual às notificações", "O player usa o mesmo vidro das notificações.")
+        Toggle(store.explicitE, "Selo E de conteúdo explícito", "Selo \"E\" antes do título das músicas explícitas.")
+        Toggle(store.mediaEdge, "Título com as pontas desfocadas", "Nomes longos rolam com as pontas desfocadas.")
     }
+    section("cv", "Capa na troca de música", backdrop) {
+        Toggle(store.albumGlow, "Capa gira e brilha na troca", "Ao trocar de música, a capa gira e solta um brilho.")
+        if (store.albumGlow.value) {
+            Toggle(store.glowSweep, "Brilho em onda de luz", "O brilho se espalha como uma onda; desligado, é uma mancha.")
+            IntSlider(store.glowPower, "Brilho: intensidade", "Quão forte o brilho aparece.", 10, 300, "%")
+            IntSlider(store.glowSize, "Brilho: tamanho", "Até onde ele se espalha em volta da capa.", 40, 200, "%")
+            IntSlider(store.glowDist, "Brilho: distância", "Quanto ele desce pelo cartão enquanto some.", 0, 250, "%")
+            IntSlider(store.glowX, "Brilho: posição lateral", "Negativo vai para a esquerda.", -150, 150, "%")
+            IntSlider(store.glowY, "Brilho: posição vertical", "Negativo vai para cima.", -100, 150, "%")
+            IntSlider(store.glowTime, "Brilho: duração", "Mais alto é mais lento.", 50, 250, "%")
+        }
+    }
+    section("br", "Barra de progresso", backdrop) {
+        Toggle(store.cometBar, "Cometa na barra (teste)", "A parte tocada vira um cometa que brilha na ponta.")
+        if (store.cometBar.value) {
+            IntSlider(store.cometThick, "Cometa: espessura da barra", "0 = igual à barra do sistema.", 0, 10, " dp", step = 1)
+            IntSlider(store.cometTail, "Cometa: tamanho da cauda", "Comprimento máximo da cauda.", 20, 200, " dp")
+            IntSlider(store.cometFade, "Cometa: começo apagado", "Quanto o começo fica transparente.", 0, 100, "%")
+            IntSlider(store.cometGlow, "Cometa: brilho", "Luz em volta da ponta; 0 tira.", 0, 100, "%")
+            IntSlider(store.cometSize, "Cometa: tamanho do brilho", "Até onde a luz da ponta se espalha.", 50, 250, "%")
+            IntSlider(store.cometPulse, "Cometa: pulsar", "O brilho pulsa; 0 deixa fixo.", 0, 100, "%")
+            IntSlider(store.cometSparks, "Cometa: faíscas", "Pontinhos que ficam para trás; 0 tira.", 0, 10, "", step = 1)
+            Toggle(store.cometAuto, "Começo na cor da capa", "O começo da barra pega a cor da capa.")
+            ColorChoice(store.cometColor, "Cor da ponta", withWhite = true)
+        }
+        Toggle(store.mediaCut, "Barra e tempos como no iOS (teste)", "A barra e os tempos ganham o efeito vibrancy.")
+        if (store.mediaCut.value) {
+            IntSlider(store.mvText, "iOS: intensidade dos números", "Força do efeito nos tempos.", 0, 100, "%")
+            IntSlider(store.mvTrack, "iOS: intensidade do trilho", "A parte que falta tocar.", 0, 100, "%")
+            IntSlider(store.mvPlayed, "iOS: intensidade da parte tocada", "A parte que já tocou.", 0, 100, "%")
+        }
+        Toggle(store.mediaVibPlus, "Vibrance no artista e nos botões (teste)", "Artista, botões e selo E ganham o efeito vibrancy.")
+        if (store.mediaVibPlus.value) IntSlider(store.mvExtra, "Artista e botões: intensidade", "Força do efeito.", 0, 100, "%")
+    }
+    section("ly", "Letras na tela de bloqueio", backdrop) {
+        IntSlider(store.lyricShift, "Adiantar a letra", "Atrasada, aumente; adiantada, diminua.", -20, 30, " ds", step = 1)
+        Toggle(store.lyricDim, "Fundo escuro com as letras", "Escurece o fundo enquanto as letras estão abertas.")
+        if (store.lyricDim.value) IntSlider(store.lyricDimPct, "Fundo escuro: intensidade", "100% fica quase preto.", 10, 100, "%")
+        Toggle(store.lyricVideo, "Letras estilo vídeo lírico", "Uma frase por vez, centralizada, no estilo escolhido.")
+        if (store.lyricVideo.value) {
+            OverlayDropdownPreference(
+                title = tr("Estilo das letras"),
+                summary = tr("Pincel aparece como tinta; Neon acende palavra por palavra na cor da capa."),
+                items = listOf(tr("Pincel"), tr("Neon")),
+                selectedIndex = store.lyricStyle.value,
+                onSelectedIndexChange = { store.lyricStyle.value = it },
+            )
+            Toggle(store.lyricRain, "Chuva no vidro (Neon)", "Gotas escorrem pelo vidro em volta do neon.")
+            if (store.lyricRain.value) {
+                IntSlider(store.lyricRainAmt, "Chuva: quantidade", "Quantas gotas batem no vidro.", 10, 300, "%")
+                IntSlider(store.lyricRainSlide, "Chuva: gotas escorrendo", "Com que facilidade as gotas descem; 0 deixa paradas.", 0, 200, "%")
+            }
+            Toggle(store.lyricStandby, "Também no StandBy", "Mesmo estilo no StandBy do HyperImmersive (marque-o no escopo).")
+        }
+    }
+    if (store.lyricVideo.value && store.lyricStyle.value == 1) neonFonts(store, backdrop)
+}
+
+/** Fontes do Neon: cada uma pode ser trocada por um arquivo .ttf/.otf do aparelho. */
+private fun LazyListScope.neonFonts(store: Store, backdrop: LayerBackdrop?) {
+    item(key = "fonts") {
+        val context = LocalContext.current
+        var slot by remember { mutableIntStateOf(-1) }
+        val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null && slot >= 0) importFont(context, store, slot, uri)
+        }
+        SmallTitle(text = tr("Fontes do Neon"))
+        GlassCard(backdrop) {
+            CardText("Fontes 1 a 5 são do neon colorido; 6 a 8, do contorno branco.")
+            for (i in 0 until 8) {
+                val cur = store.lyricFonts[i].value
+                val name = if (cur.isEmpty()) NeonNames[i] else cur.substringBeforeLast('|')
+                val face = remember(cur) {
+                    try {
+                        if (cur.isEmpty()) android.graphics.Typeface.createFromAsset(context.assets, NeonFiles[i])
+                        else android.graphics.Typeface.createFromFile(com.ilha.headsup.FontProvider.file(context, i))
+                    } catch (t: Throwable) {
+                        null
+                    }
+                }
+                BasicComponent(
+                    endActions = {
+                        TextButton(
+                            text = tr("Trocar"),
+                            onClick = {
+                                slot = i
+                                try {
+                                    picker.launch(arrayOf("font/ttf", "font/otf", "font/sfnt", "application/x-font-ttf", "application/x-font-otf", "application/font-sfnt", "application/octet-stream"))
+                                } catch (t: Throwable) {
+                                    toast(context, "Sem app de arquivos para abrir")
+                                }
+                            },
+                            colors = ButtonDefaults.textButtonColorsPrimary(),
+                        )
+                        if (cur.isNotEmpty()) {
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(
+                                text = tr("Padrão"),
+                                onClick = {
+                                    com.ilha.headsup.FontProvider.file(context, i).delete()
+                                    store.lyricFonts[i].value = ""
+                                },
+                            )
+                        }
+                    },
+                ) {
+                    Text(
+                        text = tr(if (i < 5) "Neon colorido" else "Contorno branco") + " " + (i + 1),
+                        fontSize = 13.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                    Text(
+                        text = name,
+                        fontSize = 18.sp,
+                        fontFamily = face?.let { androidx.compose.ui.text.font.FontFamily(it) },
+                        color = MiuixTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Copia a fonte escolhida para a posição e confere se o Android consegue abrir. */
+private fun importFont(context: Context, store: Store, slot: Int, uri: Uri) {
+    val max = 25L * 1024 * 1024
+    val ok = try {
+        val tmp = java.io.File(context.cacheDir, "font_in.ttf")
+        var total = 0L
+        context.contentResolver.openInputStream(uri)?.use { inp ->
+            tmp.outputStream().use { out ->
+                val buf = ByteArray(16384)
+                while (true) {
+                    val n = inp.read(buf)
+                    if (n <= 0) break
+                    out.write(buf, 0, n)
+                    total += n
+                    if (total > max) break
+                }
+            }
+        }
+        val tf = try {
+            android.graphics.Typeface.Builder(tmp).build()
+        } catch (t: Throwable) {
+            null
+        }
+        if (tf == null || total > max) {
+            tmp.delete()
+            false
+        } else {
+            val dst = com.ilha.headsup.FontProvider.file(context, slot)
+            dst.delete()
+            if (!tmp.renameTo(dst)) {
+                tmp.copyTo(dst, overwrite = true)
+                tmp.delete()
+            }
+            var name = "fonte"
+            context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst() && c.getString(0) != null) name = c.getString(0)
+            }
+            name = name.replace("|", " ").replace(Regex("\\.(ttf|otf|TTF|OTF)$"), "")
+            store.lyricFonts[slot].value = name + "|" + System.currentTimeMillis()
+            true
+        }
+    } catch (t: Throwable) {
+        false
+    }
+    toast(context, if (ok) "Fonte trocada" else "Esse arquivo não é uma fonte que o Android consiga abrir")
 }
 
 private fun LazyListScope.privacyPage(
@@ -831,7 +990,7 @@ private fun LazyListScope.privacyPage(
     onContacts: () -> Unit,
 ) {
     section("pv", "Privacidade", backdrop) {
-        Toggle(store.privOn, "Esconder conteúdo (teste)", "Desfoca as notificações dos apps e conversas escolhidos. Um toque mostra sem abrir o app. Aparece sozinho com o rosto reconhecido ou desbloqueado.")
+        Toggle(store.privOn, "Esconder conteúdo (teste)", "Desfoca as notificações escolhidas; toque para ver.")
         Toggle(store.privUnlocked, "Esconder também desbloqueado", "Mesmo desbloqueado, só aparece tocando.")
     }
     section("pq", "O que esconder", backdrop) {
@@ -841,7 +1000,7 @@ private fun LazyListScope.privacyPage(
         ArrowPreference(title = tr("Apps"), summary = tr(if (na == 0) "Nenhum escolhido" else "$na ${if (na == 1) "app" else "apps"} com tudo escondido"), onClick = onApps)
         ArrowPreference(title = tr("Conversas"), summary = tr(if (nc == 0) "Nenhuma escolhida · só as de apps de mensagem" else "$nc ${if (nc == 1) "conversa" else "conversas"}"), onClick = onConvs)
         ArrowPreference(title = tr("Contatos"), summary = tr(if (nk == 0) "Nenhum escolhido · vale em qualquer app de mensagem" else "$nk ${if (nk == 1) "contato" else "contatos"}"), onClick = onContacts)
-        CardText("Conversas aparecem na lista depois da primeira notificação delas. Contatos valem pelo nome salvo na agenda.")
+        CardText("Conversas aparecem depois da primeira notificação.")
     }
 }
 
@@ -975,37 +1134,50 @@ private fun LazyListScope.privacyContacts(store: Store, backdrop: LayerBackdrop?
 
 // ------------------------------------------------------------------ Extensões
 
+/** O HyperMusicCover-Enhanced oficial e a versão antiga adaptada (pacote próprio). */
+private val MusicPkgs = listOf("com.yzc26623.HyperMusicCoverEnhanced", "$MODULE.music")
+
 private fun LazyListScope.extensionsTab(store: Store, backdrop: LayerBackdrop?, context: Context) {
     if (!store.musicInstalled.value) {
         section("ext", "HyperMusicCover-Enhanced", backdrop) {
-            CardText("Capa do álbum e letras sincronizadas no bloqueio (HyperMusicCover-Enhanced, adaptado ao HyperOS 3). É um APK separado: instale a extensão \"HyperMusicCover-Enhanced\", ative no LSPosed e reinicie.")
+            CardText("Capa e letras no bloqueio. Instale o HyperMusicCover-Enhanced e ative no LSPosed.")
+            ArrowPreference(
+                title = tr("Baixar o HyperMusicCover-Enhanced"),
+                summary = tr("github.com/Lewewe/HyperMusicCover-Enhanced"),
+                onClick = {
+                    try {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Lewewe/HyperMusicCover-Enhanced/releases")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    } catch (t: Throwable) {
+                    }
+                },
+            )
         }
         return
     }
     section("mu", "Capa e letras no bloqueio", backdrop) {
-        CardText("Player do bloqueio com capa em destaque e letras sincronizadas, do HyperMusicCover-Enhanced.")
+        CardText("No HyperOS 3, o Hyper Eternity corrige o desfoque da ilha e a sincronia das letras.")
         ArrowPreference(
             title = tr("Abrir ajustes da música"),
             summary = tr("A tela da música é a original, em inglês."),
             onClick = {
-                try {
-                    context.startActivity(
-                        Intent(Intent.ACTION_MAIN)
-                            .setClassName("$MODULE.music", "com.os4.musiccover.MainActivity")
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    )
-                } catch (t: Throwable) {
-                    toast(context, "Não consegui abrir os ajustes da música")
+                val ok = MusicPkgs.any { pkg ->
+                    try {
+                        context.startActivity(
+                            Intent(Intent.ACTION_MAIN)
+                                .setClassName(pkg, "com.os4.musiccover.MainActivity")
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                        true
+                    } catch (t: Throwable) {
+                        false
+                    }
                 }
+                if (!ok) toast(context, "Não consegui abrir os ajustes da música")
             },
         )
     }
-    section("sy", "Sincronia das letras", backdrop) {
-        IntSlider(store.lyricShift, "Adiantar a letra", "Quanto a letra anda à frente da música. Atrasada, aumente; adiantada, diminua.", -20, 30, " ds", step = 1)
-        CardText("Versões de clipe podem ter cortes diferentes do álbum, e a letra pode não bater em algum trecho.")
-    }
     section("il", "Ilha no bloqueio", backdrop) {
-        CardText("A ilha do bloqueio é a do HyperMusicCover. Ligue em Abrir ajustes da música → \"Lock screen super island\". Para o vidro fosco, ligue \"Blur background\" na mesma tela.")
+        CardText("Ligue \"Lock screen super island\" e \"Blur background\" nos ajustes da música.")
     }
 }
 
@@ -1058,7 +1230,7 @@ private fun LazyListScope.settingsTab(
         )
     }
     section("lo", "Registros", backdrop) {
-        CardText("Os registros ficam no LSPosed (Registros → Módulos). Copie o resumo abaixo para mandar junto.")
+        CardText("Os registros ficam no LSPosed; copie o resumo para mandar junto.")
         ArrowPreference(
             title = tr("Copiar resumo dos ajustes"),
             onClick = {
@@ -1075,7 +1247,6 @@ private fun LazyListScope.settingsTab(
     section("ie", "Importar e exportar", backdrop) {
         ArrowPreference(title = tr("Exportar"), summary = tr("Salva todos os ajustes num arquivo."), onClick = onExport)
         ArrowPreference(title = tr("Importar"), summary = tr("Carrega os ajustes de um arquivo."), onClick = onImport)
-        CardText("Salva ou carrega todos os ajustes num arquivo. A música tem o próprio importar/exportar.")
     }
     section("sys", "Sistema", backdrop) {
         ArrowPreference(

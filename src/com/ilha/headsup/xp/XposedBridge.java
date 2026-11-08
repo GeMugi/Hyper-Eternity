@@ -83,6 +83,16 @@ public final class XposedBridge {
         Log.w("HeadsUpIlha", msg);
     }
 
+    /** Dados do APK do módulo (para ler os assets dele em processos que não enxergam o app). */
+    public static android.content.pm.ApplicationInfo moduleInfo() {
+        XposedInterface a = api;
+        try {
+            return a == null ? null : a.getModuleApplicationInfo();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     /** Ajustes guardados pelo LSPosed (escritos pelo app, lidos aqui na Interface do Sistema). */
     public static SharedPreferences remotePrefs(String group) {
         XposedInterface a = api;

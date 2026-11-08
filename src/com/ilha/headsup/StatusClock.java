@@ -57,52 +57,6 @@ final class StatusClock {
         }
     }
 
-    /**
-     * Centro do ícone deste app (desta notificação) na barra de status: {x, y, tamanho}, ou null
-     * se ele não estiver visível lá.
-     */
-    static float[] iconAnchor(View row, int statusBar) {
-        try {
-            Object entry = Refl.call(row, "getEntry");
-            if (entry == null) return null;
-            View best = null;
-            Object pack = Refl.get(entry, "mIcons");
-            Object own = Refl.get(pack, "mStatusBarIcon");
-            if (own instanceof View && usable((View) own, statusBar)) best = (View) own;
-            if (best == null && !iconAreas.isEmpty()) {
-                Object key = Refl.get(entry, "mKey");
-                ArrayList<ViewGroup> list = new ArrayList<ViewGroup>(iconAreas.keySet());
-                for (int i = 0; i < list.size() && best == null && key != null; i++) {
-                    ViewGroup g = list.get(i);
-                    if (!g.isShown()) continue;
-                    for (int j = 0; j < g.getChildCount(); j++) {
-                        View c = g.getChildAt(j);
-                        if (!usable(c, statusBar)) continue;
-                        Object sbn = Refl.get(c, "mNotification");
-                        if (sbn != null && key.equals(Refl.call(sbn, "getKey"))) {
-                            best = c;
-                            break;
-                        }
-                    }
-                }
-            }
-            if (best == null) return null;
-            best.getLocationOnScreen(tmp);
-            float sw = best.getWidth() * Math.abs(best.getScaleX());
-            float sh = best.getHeight() * Math.abs(best.getScaleY());
-            float size = Math.min(sw, sh);
-            return new float[] {tmp[0] + sw * 0.5f, tmp[1] + sh * 0.5f, size};
-        } catch (Throwable t) {
-            return null;
-        }
-    }
-
-    static boolean usable(View v, int statusBar) {
-        if (!v.isShown() || v.getWidth() <= 0 || v.getHeight() <= 0 || v.getAlpha() < 0.05f) return false;
-        v.getLocationOnScreen(tmp);
-        return tmp[1] >= -2 && tmp[1] < statusBar && v.getHeight() <= statusBar * 1.4f;
-    }
-
     /** Ponto abaixo do relógio visível na barra de status (x central, y da base), ou null. */
     /** O relógio mais à esquerda que está à vista na barra de status. */
     static View leftClock() {

@@ -355,14 +355,7 @@ final class Privacy {
         }
 
         public void draw(Canvas c) {
-            if (true) return;   // só o borrado, sem texto por cima
-            float d = row.getResources().getDisplayMetrics().density;
-            boolean dark = (row.getResources().getConfiguration().uiMode & 0x30) == 0x20;
-            p.setColor(dark ? 0xEBFFFFFF : 0xE6000000);
-            p.setTextSize(14f * d);
-            android.graphics.Rect b = getBounds();
-            float cy = b.exactCenterY() + 5f * d;
-            c.drawText("Toque para ver", b.exactCenterX(), cy, p);
+            // só o borrado, sem texto por cima
         }
 
         public void setAlpha(int a) {

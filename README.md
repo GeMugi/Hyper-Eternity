@@ -19,7 +19,8 @@ Módulo LSPosed para **HyperOS 3 / HyperOS 4** (Android 16/17) que muda as notif
 | Mais linhas | 2–10 linhas na central; 3 dentro de pilhas | Configurable lines in shade |
 | Privacidade | Desfoque por app, conversa ou contato (inclusive grupos) | Per-app/conversation/contact blur |
 | Pílulas do relógio | Vermelho (gravação), azul (localização), verde (roteador), animadas | Status bar clock pills: rec / location / hotspot |
-| Player | Vibrancy estilo iOS, capa que gira e brilha, título com pontas desfocadas | iOS-style vibrancy player |
+| Player | Estilo OriginOS ou ColorOS, vibrancy estilo iOS, capa que gira e brilha, selo E | OriginOS / ColorOS style player, iOS-style vibrancy |
+| Letras | Estilo vídeo lírico (pincel ou neon com chuva no vidro), fontes trocáveis, fundo escuro, também no StandBy | Lyric video style lyrics (brush or neon with rain), custom fonts, StandBy |
 | Bloqueio | Empilhar, rolar sem desbloquear, relógio que acompanha, desfoque do topo | Lock screen stacking & scrolling |
 | App | Tela de ajustes em miuix: fundo animado, vidro fosco, barra flutuante | miuix settings app |
 
@@ -27,13 +28,14 @@ Módulo LSPosed para **HyperOS 3 / HyperOS 4** (Android 16/17) que muda as notif
 
 - **Hooks** (`src/`, `apistubs/`) — o módulo LSPosed em Java: heads-up, pilhas, bloqueio, cortina, player. *LSPosed hooks (Java).*
 - **App de ajustes** (`miuix-app/ilha/`) — a tela de ajustes feita com [miuix](https://github.com/compose-miuix-ui/miuix) (Kotlin/Compose), no mesmo pacote `com.ilha.headsup`. *Settings app built with miuix.*
-- **HyperMusicCover-Enhanced (extensão)** — opcional, APK separado: capa e letras no bloqueio. *Optional extension, separate APK.*
+- **HyperMusicCover-Enhanced** — opcional, o APK oficial: capa e letras no bloqueio. No HyperOS 3 o Hyper Eternity corrige o desfoque da ilha e a sincronia das letras. *Optional, the official APK; Hyper Eternity fixes it on HyperOS 3.*
 
 ## Créditos / Credits
 
 - **Fabulous Lightning McQ (@Gmugi)** — autor, ideias e testes.
 - A extensão usa o [HyperMusicCover-Enhanced](https://github.com/Lewewe/HyperMusicCover-Enhanced) de Lewewe, baseado no [HyperMusicCover](https://github.com/zyl6932/HyperMusicCover) de zyl6932 (AGPL-3.0).
 - Tela de ajustes feita com [miuix](https://github.com/compose-miuix-ui/miuix) (Apache 2.0).
+- Fontes das letras do [Google Fonts](https://fonts.google.com) (SIL Open Font License 1.1; licenças em `miuix-app/ilha/src/main/assets`).
 - Desenvolvimento assistido por Claude (Anthropic).
 
 ## Licença / License

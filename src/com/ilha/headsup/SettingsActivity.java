@@ -625,8 +625,14 @@ public class SettingsActivity extends Activity {
     }
 
     /** Página da aba atual (-1) ou, em Recursos, a página de um recurso. */
+    /** Posição da lista para voltar depois de refazer a mesma página (ou depois de recriar a tela). */
+    static int keepScroll = -1, keepTab = -2, keepNav = -1;
+
     private void showPage(int p) {
         if (p < -1 || p >= PAGES.length) p = -1;
+        // refazendo a página em que já está (uma opção mudou): continua no mesmo ponto da lista
+        int oldTab = tab, oldNav = nav;
+        int y0 = scrollView != null && content != null && content.getChildCount() > 0 ? scrollView.getScrollY() : -1;
         if (p >= 0) nav = 1;
         tab = p;
         ui.edit().putInt("aba", p).apply();
@@ -640,6 +646,7 @@ public class SettingsActivity extends Activity {
         header.setVisibility(root && nav == 0 ? View.VISIBLE : View.GONE);
         content.setLayoutTransition(null);
         content.removeAllViews();
+        deps.clear();
         if (rootView != null) rootView.setBackgroundColor(cBg);
         if (navBg0 != null && navBar != null) navBar.setBackground(navBg0);
         if (barBg0 != null && topBar != null) topBar.setBackground(barBg0);
@@ -661,7 +668,31 @@ public class SettingsActivity extends Activity {
         else if (nav == 3) buildAjustesApp(content);
         else buildSobre(content);
         paintNav();
-        if (scrollView != null) scrollView.scrollTo(0, 0);
+        if (scrollView != null) {
+            int y = -1;
+            if (y0 >= 0 && oldTab == tab && oldNav == nav) y = y0;
+            else if (keepScroll >= 0 && keepTab == tab && keepNav == nav) y = keepScroll;   // voltando de um recreate()
+            keepScroll = -1;
+            if (y > 0) {
+                final int fy = y;
+                scrollView.scrollTo(0, fy);
+                scrollView.post(new Runnable() {
+                    public void run() {
+                        scrollView.scrollTo(0, fy);
+                    }
+                });
+            } else scrollView.scrollTo(0, 0);
+        }
+    }
+
+    @Override
+    public void recreate() {
+        if (scrollView != null) {
+            keepScroll = scrollView.getScrollY();
+            keepTab = tab;
+            keepNav = nav;
+        }
+        super.recreate();
     }
 
     // ------------------------------------------------------------------ Início
@@ -1030,6 +1061,38 @@ public class SettingsActivity extends Activity {
         card.addView(box);
     }
 
+    /** Como choice(), mas grava nos ajustes do módulo (lidos pelos ganchos). */
+    private void choiceP(LinearLayout card, String label, final String[] names, final String key, int def, final boolean recreate) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(16), dp(12), dp(16), dp(14));
+        box.addView(text(label, 16, cText, false));
+        LinearLayout seg = new LinearLayout(this);
+        seg.setOrientation(LinearLayout.HORIZONTAL);
+        seg.setPadding(dp(3), dp(3), dp(3), dp(3));
+        seg.setBackground(round(cTrack, 14));
+        int cur = prefs.getInt(key, def);
+        for (int i = 0; i < names.length; i++) {
+            final int idx = i;
+            TextView t = text(names[i], 14, i == cur ? 0xFFFFFFFF : cText, i == cur);
+            t.setGravity(Gravity.CENTER);
+            t.setPadding(dp(6), dp(8), dp(6), dp(8));
+            if (i == cur) t.setBackground(round(cAccent, 12));
+            t.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    prefs.edit().putInt(key, idx).apply();
+                    if (recreate) recreate();
+                    else showPage(tab);
+                }
+            });
+            seg.addView(t, new LinearLayout.LayoutParams(0, -2, 1f));
+        }
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = dp(8);
+        box.addView(seg, lp);
+        card.addView(box);
+    }
+
     /** Liga/desliga da própria tela (não vai para a Interface do Sistema). */
     private void uiToggle(LinearLayout card, String label, String help, final String key, boolean def) {
         LinearLayout r = new LinearLayout(this);
@@ -1083,6 +1146,10 @@ public class SettingsActivity extends Activity {
         super.onActivityResult(code, res, data);
         if (res != RESULT_OK || data == null || data.getData() == null) return;
         try {
+            if (code >= 60 && code < 68) {
+                importFont(code - 60, data.getData());
+                return;
+            }
             if (code == 41) {
                 java.io.OutputStream out = getContentResolver().openOutputStream(data.getData(), "wt");
                 out.write(exportJson().getBytes("UTF-8"));
@@ -1121,6 +1188,116 @@ public class SettingsActivity extends Activity {
         } catch (Throwable t) {
             Toast.makeText(this, Tr.t("Não deu certo: ") + t.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    // ------------------------------------------------------------------ fontes do Neon
+
+    static final String[] NEON_DEFAULT = {"Pirata One", "Tilt Neon", "Sacramento", "Mr Dafoe", "Monoton", "Anton", "Bungee Hairline", "Audiowide"};
+
+    /** As 8 fontes do estilo Neon: cada uma pode ser trocada por um arquivo .ttf/.otf do aparelho. */
+    private void neonFonts(LinearLayout page) {
+        LinearLayout sec = section(page, "Fontes do Neon");
+        sec.addView(note("As fileiras coloridas (tubo neon) sorteiam entre as fontes 1 a 5; as de contorno branco, entre 6 a 8. Toque em Trocar e escolha um arquivo de fonte (.ttf ou .otf); Padrão volta para a fonte original."));
+        for (int i = 0; i < 8; i++) {
+            final int slot = i;
+            String cur = prefs.getString(Keys.LYRIC_FONT + i, "");
+            String name = cur.isEmpty() ? NEON_DEFAULT[i] : cur.substring(0, Math.max(0, cur.lastIndexOf('|') < 0 ? cur.length() : cur.lastIndexOf('|')));
+            LinearLayout r = row();
+            r.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout col = new LinearLayout(this);
+            col.setOrientation(LinearLayout.VERTICAL);
+            col.addView(text((i < 5 ? Tr.t("Neon colorido") : Tr.t("Contorno branco")) + " " + (i + 1), 12.5f, cSub, false));
+            TextView nm = text(name, 15, cText, true);
+            if (cur.isEmpty()) {
+                try {
+                    nm.setTypeface(Typeface.createFromAsset(getAssets(), LyricVideo.NF[i]));
+                } catch (Throwable ignored) {
+                }
+            } else {
+                try {
+                    nm.setTypeface(Typeface.createFromFile(FontProvider.file(this, i)));
+                } catch (Throwable ignored) {
+                }
+            }
+            nm.setSingleLine(true);
+            nm.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            col.addView(nm);
+            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, -2, 1f);
+            clp.leftMargin = dp(4);
+            r.addView(col, clp);
+            r.addView(button(Tr.t("Trocar"), true, new View.OnClickListener() {
+                public void onClick(View v) {
+                    Intent it = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    it.addCategory(Intent.CATEGORY_OPENABLE);
+                    it.setType("*/*");
+                    it.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"font/ttf", "font/otf", "font/sfnt", "application/x-font-ttf", "application/x-font-otf", "application/font-sfnt", "application/octet-stream"});
+                    try {
+                        startActivityForResult(it, 60 + slot);
+                    } catch (Throwable t) {
+                        Toast.makeText(SettingsActivity.this, Tr.t("Sem app de arquivos para abrir"), Toast.LENGTH_SHORT).show();
+                    }
+                }
+            }), new LinearLayout.LayoutParams(-2, -2));
+            if (!cur.isEmpty()) {
+                LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-2, -2);
+                blp.leftMargin = dp(6);
+                r.addView(button(Tr.t("Padrão"), false, new View.OnClickListener() {
+                    public void onClick(View v) {
+                        FontProvider.file(SettingsActivity.this, slot).delete();
+                        prefs.edit().putString(Keys.LYRIC_FONT + slot, "").apply();
+                        showPage(tab);
+                    }
+                }), blp);
+            }
+            sec.addView(r);
+        }
+    }
+
+    /** Copia a fonte escolhida para a posição e confere se o Android consegue abrir. */
+    private void importFont(int slot, android.net.Uri uri) throws Exception {
+        java.io.File tmp = new java.io.File(getCacheDir(), "font_in.ttf");
+        java.io.InputStream in = getContentResolver().openInputStream(uri);
+        java.io.OutputStream out = new java.io.FileOutputStream(tmp);
+        byte[] buf = new byte[16384];
+        int n;
+        long total = 0;
+        while ((n = in.read(buf)) > 0) {
+            out.write(buf, 0, n);
+            total += n;
+            if (total > 25L * 1024 * 1024) break;
+        }
+        in.close();
+        out.close();
+        Typeface tf = null;
+        try {
+            tf = new Typeface.Builder(tmp).build();
+        } catch (Throwable ignored) {
+        }
+        if (tf == null || total > 25L * 1024 * 1024) {
+            tmp.delete();
+            Toast.makeText(this, Tr.t("Esse arquivo não é uma fonte que o Android consiga abrir"), Toast.LENGTH_LONG).show();
+            return;
+        }
+        java.io.File dst = FontProvider.file(this, slot);
+        dst.delete();
+        if (!tmp.renameTo(dst)) {
+            java.io.FileInputStream fi = new java.io.FileInputStream(tmp);
+            java.io.FileOutputStream fo = new java.io.FileOutputStream(dst);
+            while ((n = fi.read(buf)) > 0) fo.write(buf, 0, n);
+            fi.close();
+            fo.close();
+            tmp.delete();
+        }
+        String name = "fonte";
+        android.database.Cursor c = getContentResolver().query(uri, new String[]{android.provider.OpenableColumns.DISPLAY_NAME}, null, null, null);
+        if (c != null) {
+            if (c.moveToFirst() && c.getString(0) != null) name = c.getString(0);
+            c.close();
+        }
+        name = name.replace("|", " ").replaceAll("\\.(ttf|otf|TTF|OTF)$", "");
+        prefs.edit().putString(Keys.LYRIC_FONT + slot, name + "|" + System.currentTimeMillis()).apply();
+        Toast.makeText(this, Tr.t("Fonte trocada"), Toast.LENGTH_SHORT).show();
+        showPage(tab);
     }
 
     // ------------------------------------------------------------------ Sobre
@@ -1861,6 +2038,7 @@ public class SettingsActivity extends Activity {
     private void buildSistema(LinearLayout page) {
         LinearLayout ig = section(page, "Instagram");
         toggle(ig, "Barra de abas de vidro no Instagram (teste)", "A barra de baixo do Instagram vira uma pílula de vidro flutuante, com o feed passando por trás. Precisa do Instagram marcado no escopo do LSPosed.", Keys.IG_GLASS, Keys.D_IG_GLASS);
+        choiceP(ig, "Estilo do vidro", new String[]{"Líquido", "Fosco"}, Keys.IG_GLASS_STYLE, Keys.D_IG_GLASS_STYLE, false);
         LinearLayout kb = section(page, "Teclado");
         toggle(kb, "Gboard desfocado (teste)", "O fundo do Gboard fica transparente com o desfoque do sistema atrás. Precisa do Gboard marcado no escopo do LSPosed e de reabrir o teclado.", Keys.KB_BLUR, Keys.D_KB_BLUR);
         slider(kb, "Intensidade do desfoque", "Quanto o fundo atrás do teclado fica borrado.", Keys.KB_BLUR_R, Keys.D_KB_BLUR_R, 0, 150, "");
@@ -1894,37 +2072,88 @@ public class SettingsActivity extends Activity {
     // ------------------------------------------------------------------ aba Música
 
     private void buildMusic(LinearLayout page) {
-        LinearLayout pg = section(page, "Player da gaveta");
-        toggle(pg, "Player da central no estilo ColorOS (teste)", "Na página de música e no detalhe do player da central (inclusive com o mod iOS26 Control Center): capa de ponta a ponta no topo que some num degradê, com título e artista no centro.", Keys.PLAYER_IOS, Keys.D_PLAYER_IOS);
-        toggle(pg, "Selo E de conteúdo explícito", "Mostra o selo \"E\" (como no Spotify e no iOS) antes do título das músicas explícitas, no player do HyperOS e no player estilo ColorOS. Depende do app de música informar a marca de explícito.", Keys.EXPLICIT_E, Keys.D_EXPLICIT_E);
-        toggle(pg, "Fundo igual às notificações", "O player usa o mesmo vidro das outras notificações, em vez do mais escuro.", Keys.MEDIA_PURE, Keys.D_MEDIA_PURE);
-        toggle(pg, "Capa gira e brilha na troca", "Como no ColorOS 17: ao trocar a música, a capa gira e solta um brilho que se espalha pelo cartão.", Keys.ALBUM_GLOW, Keys.D_ALBUM_GLOW);
-        toggle(pg, "Brilho em onda de luz", "Como no ColorOS 17: uma onda de luz nasce na capa e se espalha pelo cartão, como uma gota na água. Desligado, a capa solta uma mancha desfocada. Posição e distância só valem para a mancha.", Keys.GLOW_SWEEP, Keys.D_GLOW_SWEEP);
-        slider(pg, "Brilho: intensidade", "Quão forte o brilho aparece. Acima de 100% fica mais aceso que o padrão.", Keys.GLOW_POWER, Keys.D_GLOW_POWER, 10, 300, "%");
-        slider(pg, "Brilho: tamanho", "Até onde ele se espalha em volta da capa.", Keys.GLOW_SIZE, Keys.D_GLOW_SIZE, 40, 200, "%");
-        slider(pg, "Brilho: distância", "Quanto ele desce pelo cartão enquanto some.", Keys.GLOW_DIST, Keys.D_GLOW_DIST, 0, 250, "%");
-        slider(pg, "Brilho: posição lateral", "Para a esquerda (negativo) ou direita, em % da capa.", Keys.GLOW_X, Keys.D_GLOW_X, -150, 150, "%");
-        slider(pg, "Brilho: posição vertical", "Para cima (negativo) ou para baixo, em % da capa.", Keys.GLOW_Y, Keys.D_GLOW_Y, -100, 150, "%");
-        slider(pg, "Brilho: duração", "Mais alto é mais lento.", Keys.GLOW_TIME, Keys.D_GLOW_TIME, 50, 250, "%");
-        toggle(pg, "Título com as pontas desfocadas", "Nomes compridos rolam com as pontas desfocadas, em vez de cortadas.", Keys.MEDIA_EDGE, Keys.D_MEDIA_EDGE);
-        toggle(pg, "Cometa na barra (teste)", "A barra do player fica fina e a parte tocada vai da cor da capa até uma ponta branca que brilha, como no iOS.", Keys.COMET_BAR, Keys.D_COMET_BAR);
-        slider(pg, "Cometa: espessura da barra", "Grossura da barra com o cometa. 0 = igual à barra do sistema (sem mudar de tamanho ao pausar).", Keys.COMET_THICK, Keys.D_COMET_THICK, 0, 10, " dp");
-        slider(pg, "Cometa: tamanho da cauda", "Comprimento máximo da cauda. Ela nasce curta e cresce com a música até esse tamanho, abrindo em V para trás.", Keys.COMET_TAIL, Keys.D_COMET_TAIL, 20, 200, " dp");
-        slider(pg, "Cometa: começo apagado", "Quanto o começo da parte tocada fica mais transparente. 0 deixa sólido.", Keys.COMET_FADE, Keys.D_COMET_FADE, 0, 100, "%");
-        slider(pg, "Cometa: brilho", "Quão forte a luz em volta da ponta aparece. 0 tira o brilho.", Keys.COMET_GLOW, Keys.D_COMET_GLOW, 0, 100, "%");
-        slider(pg, "Cometa: tamanho do brilho", "Até onde a luz da ponta se espalha.", Keys.COMET_SIZE, Keys.D_COMET_SIZE, 50, 250, "%");
-        slider(pg, "Cometa: pulsar", "O brilho pulsa no ritmo de um segundo. 0 deixa fixo.", Keys.COMET_PULSE, Keys.D_COMET_PULSE, 0, 100, "%");
-        slider(pg, "Cometa: faíscas", "Pontinhos que ficam para trás enquanto toca. 0 tira.", Keys.COMET_SPARKS, Keys.D_COMET_SPARKS, 0, 10, "");
-        LinearLayout cc = section(page, "Cor do cometa");
-        toggle(cc, "Começo na cor da capa", "O começo da parte tocada pega a cor mais viva da capa, clareada. Desligado, a barra toda usa a cor da ponta.", Keys.COMET_AUTO, Keys.D_COMET_AUTO);
-        colorRow(cc, "Cor da ponta", Keys.COMET_COLOR, 0xFFFFFFFF);
-        toggle(pg, "Barra e tempos como no iOS (teste)", "A barra e os tempos ganham o efeito vibrancy do iOS, no tom do vidro. Troca sozinho entre claro e escuro.", Keys.MEDIA_CUT, Keys.D_MEDIA_CUT);
-        slider(pg, "iOS: intensidade dos números", "Quanto os tempos clareiam (escuro) ou escurecem (claro) o vidro.", Keys.MV_TEXT, Keys.D_MV_TEXT, 0, 100, "%");
-        slider(pg, "iOS: intensidade do trilho", "A parte da barra que ainda falta tocar.", Keys.MV_TRACK, Keys.D_MV_TRACK, 0, 100, "%");
-        toggle(pg, "Vibrance no artista e nos botões (teste)", "O nome do artista e os botões de voltar e pular ganham o efeito vibrancy, como os tempos.", Keys.MEDIA_VIB_PLUS, Keys.D_MEDIA_VIB_PLUS);
-        slider(pg, "Artista e botões: intensidade", "Quanto clareiam (escuro) ou escurecem (claro) o vidro.", Keys.MV_EXTRA, Keys.D_MV_EXTRA, 0, 100, "%");
-        slider(pg, "iOS: intensidade da parte tocada", "A parte da barra que já tocou.", Keys.MV_PLAYED, Keys.D_MV_PLAYED, 0, 100, "%");
+        // Player: como o cartão de música fica
+        LinearLayout pl = section(page, "Player");
+        toggle(pl, "Player estilo OriginOS", "Deixa o player de música da central como o do OriginOS: capa grande à esquerda com o ícone do app no canto, a barra de progresso ao lado da capa e os controles centralizados embaixo. Reinicie a Interface do Sistema para aplicar.", Keys.PLAYER_ORIGIN, Keys.D_PLAYER_ORIGIN);
+        toggle(pl, "Player da central no estilo ColorOS (teste)", "Na página de música e no detalhe do player da central (inclusive com o mod iOS26 Control Center): capa de ponta a ponta no topo que some num degradê, com título e artista no centro.", Keys.PLAYER_IOS, Keys.D_PLAYER_IOS);
+        toggle(pl, "Fundo igual às notificações", "O player usa o mesmo vidro das outras notificações, em vez do mais escuro.", Keys.MEDIA_PURE, Keys.D_MEDIA_PURE);
+        toggle(pl, "Selo E de conteúdo explícito", "Mostra o selo \"E\" (como no Spotify e no iOS) antes do título das músicas explícitas, no player do HyperOS e no player estilo ColorOS. Depende do app de música informar a marca de explícito.", Keys.EXPLICIT_E, Keys.D_EXPLICIT_E);
+        toggle(pl, "Título com as pontas desfocadas", "Nomes compridos rolam com as pontas desfocadas, em vez de cortadas.", Keys.MEDIA_EDGE, Keys.D_MEDIA_EDGE);
 
+        // Capa: o giro e o brilho ao trocar de música
+        LinearLayout cv = section(page, "Capa na troca de música");
+        toggle(cv, "Capa gira e brilha na troca", "Como no ColorOS 17: ao trocar a música, a capa gira e solta um brilho que se espalha pelo cartão.", Keys.ALBUM_GLOW, Keys.D_ALBUM_GLOW);
+        LinearLayout cvd = dep(cv, Keys.ALBUM_GLOW, Keys.D_ALBUM_GLOW);
+        toggle(cvd, "Brilho em onda de luz", "Como no ColorOS 17: uma onda de luz nasce na capa e se espalha pelo cartão, como uma gota na água. Desligado, a capa solta uma mancha desfocada. Posição e distância só valem para a mancha.", Keys.GLOW_SWEEP, Keys.D_GLOW_SWEEP);
+        slider(cvd, "Brilho: intensidade", "Quão forte o brilho aparece. Acima de 100% fica mais aceso que o padrão.", Keys.GLOW_POWER, Keys.D_GLOW_POWER, 10, 300, "%");
+        slider(cvd, "Brilho: tamanho", "Até onde ele se espalha em volta da capa.", Keys.GLOW_SIZE, Keys.D_GLOW_SIZE, 40, 200, "%");
+        slider(cvd, "Brilho: distância", "Quanto ele desce pelo cartão enquanto some.", Keys.GLOW_DIST, Keys.D_GLOW_DIST, 0, 250, "%");
+        slider(cvd, "Brilho: posição lateral", "Para a esquerda (negativo) ou direita, em % da capa.", Keys.GLOW_X, Keys.D_GLOW_X, -150, 150, "%");
+        slider(cvd, "Brilho: posição vertical", "Para cima (negativo) ou para baixo, em % da capa.", Keys.GLOW_Y, Keys.D_GLOW_Y, -100, 150, "%");
+        slider(cvd, "Brilho: duração", "Mais alto é mais lento.", Keys.GLOW_TIME, Keys.D_GLOW_TIME, 50, 250, "%");
+
+        // Barra de progresso, tempos e vibrance
+        LinearLayout br = section(page, "Barra de progresso");
+        toggle(br, "Cometa na barra (teste)", "A barra do player fica fina e a parte tocada vai da cor da capa até uma ponta branca que brilha, como no iOS.", Keys.COMET_BAR, Keys.D_COMET_BAR);
+        LinearLayout cmd = dep(br, Keys.COMET_BAR, Keys.D_COMET_BAR);
+        slider(cmd, "Cometa: espessura da barra", "Grossura da barra com o cometa. 0 = igual à barra do sistema (sem mudar de tamanho ao pausar).", Keys.COMET_THICK, Keys.D_COMET_THICK, 0, 10, " dp");
+        slider(cmd, "Cometa: tamanho da cauda", "Comprimento máximo da cauda. Ela nasce curta e cresce com a música até esse tamanho, abrindo em V para trás.", Keys.COMET_TAIL, Keys.D_COMET_TAIL, 20, 200, " dp");
+        slider(cmd, "Cometa: começo apagado", "Quanto o começo da parte tocada fica mais transparente. 0 deixa sólido.", Keys.COMET_FADE, Keys.D_COMET_FADE, 0, 100, "%");
+        slider(cmd, "Cometa: brilho", "Quão forte a luz em volta da ponta aparece. 0 tira o brilho.", Keys.COMET_GLOW, Keys.D_COMET_GLOW, 0, 100, "%");
+        slider(cmd, "Cometa: tamanho do brilho", "Até onde a luz da ponta se espalha.", Keys.COMET_SIZE, Keys.D_COMET_SIZE, 50, 250, "%");
+        slider(cmd, "Cometa: pulsar", "O brilho pulsa no ritmo de um segundo. 0 deixa fixo.", Keys.COMET_PULSE, Keys.D_COMET_PULSE, 0, 100, "%");
+        slider(cmd, "Cometa: faíscas", "Pontinhos que ficam para trás enquanto toca. 0 tira.", Keys.COMET_SPARKS, Keys.D_COMET_SPARKS, 0, 10, "");
+        toggle(cmd, "Começo na cor da capa", "O começo da parte tocada pega a cor mais viva da capa, clareada. Desligado, a barra toda usa a cor da ponta.", Keys.COMET_AUTO, Keys.D_COMET_AUTO);
+        colorRow(cmd, "Cor da ponta", Keys.COMET_COLOR, 0xFFFFFFFF);
+        toggle(br, "Barra e tempos como no iOS (teste)", "A barra e os tempos ganham o efeito vibrancy do iOS, no tom do vidro. Troca sozinho entre claro e escuro.", Keys.MEDIA_CUT, Keys.D_MEDIA_CUT);
+        LinearLayout iod = dep(br, Keys.MEDIA_CUT, Keys.D_MEDIA_CUT);
+        slider(iod, "iOS: intensidade dos números", "Quanto os tempos clareiam (escuro) ou escurecem (claro) o vidro.", Keys.MV_TEXT, Keys.D_MV_TEXT, 0, 100, "%");
+        slider(iod, "iOS: intensidade do trilho", "A parte da barra que ainda falta tocar.", Keys.MV_TRACK, Keys.D_MV_TRACK, 0, 100, "%");
+        slider(iod, "iOS: intensidade da parte tocada", "A parte da barra que já tocou.", Keys.MV_PLAYED, Keys.D_MV_PLAYED, 0, 100, "%");
+        toggle(br, "Vibrance no artista e nos botões (teste)", "O nome do artista, os botões de voltar e pular e o selo E ganham o efeito vibrancy, como os tempos.", Keys.MEDIA_VIB_PLUS, Keys.D_MEDIA_VIB_PLUS);
+        LinearLayout vbd = dep(br, Keys.MEDIA_VIB_PLUS, Keys.D_MEDIA_VIB_PLUS);
+        slider(vbd, "Artista e botões: intensidade", "Quanto clareiam (escuro) ou escurecem (claro) o vidro.", Keys.MV_EXTRA, Keys.D_MV_EXTRA, 0, 100, "%");
+
+        // Letras na tela de bloqueio (HyperMusicCover)
+        LinearLayout ly = section(page, "Letras na tela de bloqueio");
+        ly.addView(note("Valem para as letras do HyperMusicCover, quando elas estão abertas no bloqueio."));
+        toggle(ly, "Fundo escuro com as letras", "Escurece todo o fundo da tela de bloqueio enquanto as letras estão abertas, para o texto se destacar. O relógio, as notificações e o player continuam claros. Funciona com as letras do HyperMusicCover e com os estilos daqui.", Keys.LYRIC_DIM, Keys.D_LYRIC_DIM);
+        LinearLayout dmd = dep(ly, Keys.LYRIC_DIM, Keys.D_LYRIC_DIM);
+        slider(dmd, "Fundo escuro: intensidade", "Quanto escurece. 100% fica quase preto.", Keys.LYRIC_DIM_PCT, Keys.D_LYRIC_DIM_PCT, 10, 100, "%");
+        toggle(ly, "Letras estilo vídeo lírico", "Muda o desenho das letras do HyperMusicCover na tela de bloqueio: uma frase por vez, centralizada, no estilo escolhido abaixo.", Keys.LYRIC_VIDEO, Keys.D_LYRIC_VIDEO);
+        LinearLayout lvd = dep(ly, Keys.LYRIC_VIDEO, Keys.D_LYRIC_VIDEO);
+        choiceP(lvd, "Estilo das letras", new String[]{"Pincel", "Neon"}, Keys.LYRIC_STYLE, Keys.D_LYRIC_STYLE, false);
+        lvd.addView(note("Pincel: letra de pincel que aparece como tinta, se aproxima devagar e desce sumindo. Neon: as palavras acendem uma a uma, em fileiras curvadas como uma bolha, na cor da capa."));
+        toggle(lvd, "Chuva no vidro (Neon)", "No estilo Neon, gotas de chuva escorrem pelo vidro em volta das letras, onde o neon ilumina.", Keys.LYRIC_RAIN, Keys.D_LYRIC_RAIN);
+        LinearLayout rnd = dep(lvd, Keys.LYRIC_RAIN, Keys.D_LYRIC_RAIN);
+        slider(rnd, "Chuva: quantidade", "Quantas gotas batem no vidro. Com mais chuva as gotas se juntam mais e escorrem mais.", Keys.LYRIC_RAIN_AMT, Keys.D_LYRIC_RAIN_AMT, 10, 300, "%");
+        slider(rnd, "Chuva: gotas escorrendo", "Com que facilidade as gotas pesadas descem. 0 deixa todas paradas.", Keys.LYRIC_RAIN_SLIDE, Keys.D_LYRIC_RAIN_SLIDE, 0, 200, "%");
+        toggle(lvd, "Também no StandBy", "Usa o mesmo estilo nas letras do StandBy (a extensão HyperImmersive do HyperMusicCover, com o celular deitado carregando). Marque o HyperImmersive no escopo do Hyper Eternity no LSPosed e feche o StandBy uma vez.", Keys.LYRIC_STANDBY, Keys.D_LYRIC_STANDBY);
+        LinearLayout fonts = new LinearLayout(this);
+        fonts.setOrientation(LinearLayout.VERTICAL);
+        page.addView(fonts, new LinearLayout.LayoutParams(-1, -2));
+        depView(fonts, Keys.LYRIC_VIDEO, Keys.D_LYRIC_VIDEO);
+        neonFonts(fonts);
+    }
+
+    // ------------------------------------------------------------------ opções que dependem de outra
+
+    private final java.util.HashMap<String, java.util.ArrayList<View>> deps = new java.util.HashMap<>();
+
+    /** Bloco que só aparece com a opção "key" ligada (os ajustes finos somem quando a opção está desligada). */
+    private LinearLayout dep(LinearLayout card, String key, boolean def) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        card.addView(box, new LinearLayout.LayoutParams(-1, -2));
+        depView(box, key, def);
+        return box;
+    }
+
+    private void depView(View v, String key, boolean def) {
+        v.setVisibility(prefs.getBoolean(key, def) ? View.VISIBLE : View.GONE);
+        java.util.ArrayList<View> l = deps.get(key);
+        if (l == null) deps.put(key, l = new java.util.ArrayList<>());
+        l.add(v);
     }
 
     private void buildCreditos(LinearLayout page) {
@@ -2198,6 +2427,8 @@ public class SettingsActivity extends Activity {
         // liga/desliga não tem "valor original" para voltar: sem o botão ↺ aqui
         sw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             public void onCheckedChanged(CompoundButton b, boolean on) {
+                java.util.ArrayList<View> dl = deps.get(key);
+                if (dl != null) for (View dv : dl) dv.setVisibility(on ? View.VISIBLE : View.GONE);
                 SharedPreferences.Editor e = prefs.edit().putBoolean(key, on);
                 // modo de segurança: anota a última opção ligada
                 if (on) e.putString(Keys.SAFE_LAST, key).putLong(Keys.SAFE_AT, System.currentTimeMillis());

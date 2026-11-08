@@ -234,14 +234,7 @@ public final class ElasticState {
 
     /** Procura o ícone deste app na barra de status; se achar, ele vira a origem. */
     boolean findIcon(View r) {
-        if (true) return false;   // sem gota: nasce sempre como a barrinha abaixo do relógio
-        float[] a = StatusClock.iconAnchor(r, sbHeight);
-        if (a == null) return false;
-        originX = a[0];
-        originY = a[1];
-        iconSize = a[2];
-        anchorKind = 2;
-        return true;
+        return false;   // sem gota: nasce sempre como a barrinha abaixo do relógio
     }
 
     String anchorName() {

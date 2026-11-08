@@ -306,38 +306,6 @@ final class RecPill {
     static java.lang.reflect.Field fCur;
     static final Object NO = new Object();
 
-    /**
-     * Vibrance do iOS: a hora vira um recorte na pílula e deixa ver o que está passando atrás dela.
-     * A pílula e o texto vão para uma camada própria; o texto apaga a pílula (DST_OUT) onde passa.
-     */
-    static void vibOn(TextView v, XC_MethodHook.MethodHookParam p) throws Throwable {
-        p.setObjectExtra("vib", null);
-        if (!Prefs.pillVib || prog <= 0f) return;
-        float d = v.getResources().getDisplayMetrics().density;
-        if (!(v.getHeight() > 0 && v.getHeight() < 40f * d)) return;
-        if (fCur == null) {
-            fCur = TextView.class.getDeclaredField("mCurTextColor");
-            fCur.setAccessible(true);
-        }
-        Canvas c = (Canvas) p.args[0];
-        int sc = c.saveLayer(0, 0, v.getWidth(), v.getHeight(), null);
-        int cur = fCur.getInt(v);
-        p.setObjectExtra("vib", new int[]{cur, sc});
-        // na entrada/saída o recorte acompanha a pílula
-        int a = Math.round(255 * ease(prog));
-        fCur.setInt(v, (a << 24) | 0x000000);
-        v.getPaint().setBlendMode(android.graphics.BlendMode.DST_OUT);
-    }
-
-    static void vibOff(TextView v, XC_MethodHook.MethodHookParam p) throws Throwable {
-        Object was = p.getObjectExtra("vib");
-        if (!(was instanceof int[])) return;
-        int[] w = (int[]) was;
-        fCur.setInt(v, w[0]);
-        v.getPaint().setBlendMode(null);
-        ((Canvas) p.args[0]).restoreToCount(w[1]);
-    }
-
     static float ease(float t) {
         t = Math.max(0f, Math.min(1f, t));
         return 1f - (1f - t) * (1f - t) * (1f - t);   // sai rápido e assenta devagar

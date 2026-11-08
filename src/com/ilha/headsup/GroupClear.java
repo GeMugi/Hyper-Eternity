@@ -24,40 +24,6 @@ final class GroupClear {
     static Class rowCls;
     static View downOn;
 
-    static boolean touchX(ViewGroup row, android.view.MotionEvent e) {
-        int a = e.getActionMasked();
-        if (a == android.view.MotionEvent.ACTION_DOWN) {
-            downOn = null;
-            Object cc = Refl.get(row, "mChildrenContainer");
-            if (!(cc instanceof ViewGroup)) return false;
-            View col = ShadeSheet.findId((View) cc, "collapse_button", 0);
-            if (col == null || !(col.getParent() instanceof View)) return false;
-            Object x = ((View) col.getParent()).getTag(TAG);
-            if (!(x instanceof View) || !((View) x).isShown()) return false;
-            View xv = (View) x;
-            int[] l = new int[2];
-            xv.getLocationOnScreen(l);
-            float slop = 6 * xv.getResources().getDisplayMetrics().density;
-            if (e.getRawX() >= l[0] - slop && e.getRawX() <= l[0] + xv.getWidth() + slop && e.getRawY() >= l[1] - slop && e.getRawY() <= l[1] + xv.getHeight() + slop) {
-                downOn = xv;
-                xv.setPressed(true);
-                row.requestDisallowInterceptTouchEvent(true);
-                return true;
-            }
-            return false;
-        }
-        if (downOn == null) return false;
-        if (a == android.view.MotionEvent.ACTION_UP) {
-            downOn.setPressed(false);
-            downOn = null;
-            Object cc = Refl.get(row, "mChildrenContainer");
-            if (cc instanceof ViewGroup) clear((ViewGroup) cc);
-        } else if (a == android.view.MotionEvent.ACTION_CANCEL) {
-            downOn.setPressed(false);
-            downOn = null;
-        }
-        return true;
-    }
     static int logs;
 
     static void install(ClassLoader cl) {
@@ -73,19 +39,7 @@ final class GroupClear {
                     }
                 }
             });
-            // o HyperOS trata o toque no cabeçalho do grupo por conta própria (nem chega aos botões):
-            // aqui o toque em cima do "x" é pego antes, no próprio cartão do grupo
             Class row = Class.forName("com.android.systemui.statusbar.notification.row.ExpandableNotificationRow", false, cl);
-            XposedBridge.hookMethod(android.view.ViewGroup.class.getDeclaredMethod("dispatchTouchEvent", android.view.MotionEvent.class), new XC_MethodHook() {
-                protected void beforeHookedMethod(MethodHookParam p) {
-                    if (true) return;
-                    try {
-                        if (touchX((ViewGroup) p.thisObject, (android.view.MotionEvent) p.args[0])) p.setResult(Boolean.TRUE);
-                    } catch (Throwable t) {
-                        if (logs++ < 6) ElasticCard.log("limpar grupo toque: " + t);
-                    }
-                }
-            });
             rowCls = row;
             // o HyperOS refaz o cabeçalho do grupo (e o clique do botão) a cada atualização:
             // logo depois dele, o botão volta a ser "limpar" e o nome volta a recolher

@@ -127,6 +127,7 @@ final class LockWidgets extends android.widget.FrameLayout {
     /** A cada quadro da janela da central/bloqueio: põe, posiciona ou tira a fileira. */
     static void tick(View root) {
         try {
+            if (!Prefs.lockWidgets) glassAlone(root);
             if (!Prefs.lockWidgets) {
                 if (view != null && view.getParent() != null) ((ViewGroup) view.getParent()).removeView(view);
                 return;
@@ -758,14 +759,60 @@ final class LockWidgets extends android.widget.FrameLayout {
      * mantendo o formato (círculo/pílula) de cada um.
      */
     static void restyle(ViewGroup root, View me, float d) {
+        if (!sysBlur) return;
+        int[] ml = new int[2];
+        me.getLocationInWindow(ml);
+        restyleBelow(root, me, ml[1] + me.getHeight() - 4 * d, d);
+    }
+
+    static long lastGlass;
+    static int sysBlurAlone = -1;
+
+    /**
+     * Sem a fileira de widgets: a lanterna, a câmera e a ilha do bloqueio ganham o mesmo vidro
+     * do cartão do player e das notificações (junto com "fundo do player igual às notificações").
+     */
+    static void glassAlone(View root) {
         try {
-            if (!sysBlur || MiBlend.v4()) return;   // HyperOS 4: os botões do plugin já são de vidro próprio
+            if (!Prefs.mediaPure || !(root instanceof ViewGroup)) return;
+            long now = android.os.SystemClock.uptimeMillis();
+            if (now - lastGlass < 1000) return;
+            lastGlass = now;
+            ViewGroup kg = kgRef == null ? null : kgRef.get();
+            if (kg == null || !kg.isAttachedToWindow()) {
+                View f = Kg.find(root, "HyperOSKeyguardRootView", 0);
+                if (!(f instanceof ViewGroup)) return;
+                kg = (ViewGroup) f;
+                kgRef = new WeakReference<>(kg);
+            }
+            if (!kg.isShown() || kg.getAlpha() < 0.05f) return;
+            Context c = kg.getContext();
+            if (sysBlurAlone < 0) {
+                sysBlurAlone = 1;
+                try {
+                    Class mb = Class.forName("com.miui.systemui.util.MiBlurCompat", false, c.getClassLoader());
+                    Object open = mb.getMethod("getBackgroundBlurOpened", Context.class).invoke(null, c);
+                    if (Boolean.FALSE.equals(open)) sysBlurAlone = 0;
+                } catch (Throwable ignored) {
+                }
+            }
+            if (sysBlurAlone == 0) return;
+            float d = c.getResources().getDisplayMetrics().density;
+            int[] kl = new int[2];
+            kg.getLocationInWindow(kl);
+            restyleBelow((ViewGroup) root, null, kl[1] + buttonsTop(kg, d) - 8 * d, d);
+        } catch (Throwable t) {
+            if (styleLogs++ < 8) ElasticCard.log("botões do bloqueio: vidro: " + t);
+        }
+    }
+
+    static void restyleBelow(ViewGroup root, View me, float top, float d) {
+        try {
+            if (MiBlend.v4()) return;   // HyperOS 4: os botões do plugin já são de vidro próprio
             int[] cols = blendCols(root.getContext());
             if (cols == null) return;
-            int[] ml = new int[2];
-            me.getLocationInWindow(ml);
             java.util.ArrayList<View> out = new java.util.ArrayList<>();
-            band(root, me, ml[1] + me.getHeight() - 4 * d, d, out);
+            band(root, me, top, d, out);
             Class mb = Class.forName("com.miui.systemui.util.MiBlurCompat", false, root.getContext().getClassLoader());
             java.lang.reflect.Method clear = mb.getMethod("clearMiBackgroundBlendColorCompat", View.class);
             java.lang.reflect.Method set = mb.getMethod("setMiBackgroundBlendColors", View.class, int[].class, float.class);

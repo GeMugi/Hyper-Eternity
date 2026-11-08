@@ -55,7 +55,8 @@ final class IosPlayer {
         } catch (Throwable ignored) {
         }
         plog("player iOS: " + new String(new char[d * 2]).replace('\0', ' ') + v.getClass().getName() + id + " " + v.getWidth() + "x" + v.getHeight()
-                + (v.getVisibility() != View.VISIBLE ? " vis=" + v.getVisibility() : "") + (v.getBackground() != null ? " fundo" : ""));
+                + (v.getVisibility() != View.VISIBLE ? " vis=" + v.getVisibility() : "") + (v.getBackground() != null ? " fundo=" + v.getBackground().getClass().getSimpleName() : "")
+                + " @" + Math.round(v.getX()) + "," + Math.round(v.getY()) + (v.getAlpha() != 1f ? " a=" + v.getAlpha() : ""));
         if (v instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) dump(((ViewGroup) v).getChildAt(i), d + 1);
     }
 
@@ -77,6 +78,8 @@ final class IosPlayer {
     static final WeakHashMap<Resources, Integer> ids = new WeakHashMap<>();
 
     static void check(View root) {
+        ClassLoader rcl = root.getClass().getClassLoader();
+        if (!modOk && rcl != null && rcl != View.class.getClassLoader()) modHooks(rcl);
         if (!classHooked) {
             ClassLoader cl = root.getClass().getClassLoader();
             if (cl != null && cl != View.class.getClassLoader()) {
@@ -132,6 +135,7 @@ final class IosPlayer {
         if (logs++ < 3) plog("player iOS: detalhe do player encontrado");
     }
 
+    static int ancDumps;
     static boolean classHooked;
 
     /** O cabeçalho que aparece na tela nem sempre é o recém-inflado: os ganchos vão na classe dele. */
@@ -172,10 +176,29 @@ final class IosPlayer {
         }
         plog("player iOS: " + n + " ganchos em " + c.getName());
         hClass = c;
-        IosMediaPage.install(c.getClassLoader());
+        modHooks(c.getClassLoader());
+        scan();
+    }
+
+    static final java.util.Set<ClassLoader> modTried = java.util.Collections.newSetFromMap(new WeakHashMap<ClassLoader, Boolean>());
+    static boolean modOk;
+
+    /**
+     * Ganchos no mod iOS26 (página de música e detalhe). No HyperOS 3 o cabeçalho do detalhe vem do
+     * plugin; no HyperOS 4 vem da Interface do Sistema e o mod fica no plugin: tenta cada carregador novo.
+     */
+    static void modHooks(ClassLoader cl) {
+        if (modOk || cl == null || !modTried.add(cl)) return;
+        try {
+            Class.forName("com.kashi.ios.IosMediaView", false, cl);
+        } catch (Throwable t) {
+            return;
+        }
+        modOk = true;
+        IosMediaPage.install(cl);
         // mod iOS26 Control Center: a página de música reestiliza o cabeçalho (IosDetail.restyle/align/frame)
         try {
-            Class<?> d = Class.forName("com.kashi.ios.IosDetail", false, c.getClassLoader());
+            Class<?> d = Class.forName("com.kashi.ios.IosDetail", false, cl);
             XC_MethodHook after = new XC_MethodHook() {
                 protected void afterHookedMethod(MethodHookParam p) {
                     if (!Prefs.playerIos) return;
@@ -201,7 +224,6 @@ final class IosPlayer {
         } catch (Throwable t) {
             plog("player iOS: sem o mod iOS26 (" + t.getClass().getSimpleName() + ")");
         }
-        scan();
     }
 
     static int foundLogs;
@@ -305,9 +327,13 @@ final class IosPlayer {
      */
     static void apply(View header) {
         if (header.getWidth() == 0) return;
-        if (dumps == 0) {
-            dumps++;
-            dump(header, 0);
+        if (ancDumps == 0) {
+            // diagnóstico (HyperOS 4): onde o cabeçalho está e o que mais há no detalhe
+            ancDumps++;
+            View an = header;
+            for (int i = 0; i < 4 && an.getParent() instanceof View; i++) an = (View) an.getParent();
+            final View top = an;
+            header.postDelayed(new Runnable() { public void run() { plog("player iOS: detalhe em volta do cabeçalho:"); dump(top, 0); } }, 900);
         }
         float dp = header.getResources().getDisplayMetrics().density;
         View coverParent = byId(header, "coverParent");
@@ -473,72 +499,6 @@ final class IosPlayer {
         public void setAlpha(int a) {}
         public void setColorFilter(ColorFilter cf) {}
         public int getOpacity() { return PixelFormat.TRANSLUCENT; }
-    }
-
-    // ---------------------------------------------------------------- coração e repetir
-
-    static void sides(View header, ViewGroup inner, View audio, float dp) {
-        if (inner.findViewWithTag("ilha_heart") != null) {
-            refresh(inner);
-            return;
-        }
-        ViewGroup.MarginLayoutParams al = (ViewGroup.MarginLayoutParams) audio.getLayoutParams();
-        int side = Math.round(72 * dp);
-        al.setMarginStart(side);
-        al.setMarginEnd(side);
-        audio.setLayoutParams(al);
-        Context c = header.getContext();
-        for (int i = 0; i < 2; i++) {
-            final boolean heart = i == 0;
-            ImageView b = new ImageView(c);
-            b.setTag(heart ? "ilha_heart" : "ilha_repeat");
-            b.setImageDrawable(new Glyph(heart));
-            int s = Math.round(44 * dp);
-            ViewGroup.LayoutParams lp;
-            try {
-                lp = (ViewGroup.LayoutParams) audio.getLayoutParams().getClass().getConstructor(int.class, int.class).newInstance(s, s);
-            } catch (Throwable t) {
-                return;
-            }
-            setInt(lp, heart ? "startToStart" : "endToEnd", 0);
-            setInt(lp, "topToTop", audio.getId());
-            setInt(lp, "bottomToBottom", audio.getId());
-            ((ViewGroup.MarginLayoutParams) lp).setMarginStart(heart ? Math.round(14 * dp) : 0);
-            ((ViewGroup.MarginLayoutParams) lp).setMarginEnd(heart ? 0 : Math.round(14 * dp));
-            b.setPadding(Math.round(9 * dp), Math.round(9 * dp), Math.round(9 * dp), Math.round(9 * dp));
-            b.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) {
-                    MediaController mc = controller(v.getContext());
-                    if (mc == null) return;
-                    try {
-                        if (heart) {
-                            PlaybackState.CustomAction a = likeAction(mc);
-                            if (a != null) mc.getTransportControls().sendCustomAction(a, null);
-                        } else {
-                            PlaybackState.CustomAction a = action(mc, "repeat", "loop", "repetir");
-                            if (a != null) {
-                                mc.getTransportControls().sendCustomAction(a, null);
-                            } else {
-                                // sessões MediaSessionCompat/Media3: 0 nenhum, 1 uma, 2 todas
-                                repeat = (repeat + 1) % 3;
-                                int mode = repeat == 1 ? 2 : repeat == 2 ? 1 : 0;
-                                android.os.Bundle bd = new android.os.Bundle();
-                                bd.putInt("android.support.v4.media.session.action.ARGUMENT_REPEAT_MODE", mode);
-                                mc.getTransportControls().sendCustomAction("android.support.v4.media.session.action.SET_REPEAT_MODE", bd);
-                            }
-                        }
-                    } catch (Throwable ignored) {
-                    }
-                    v.postDelayed(new Runnable() {
-                        public void run() {
-                            refresh((ViewGroup) v.getParent());
-                        }
-                    }, 400);
-                }
-            });
-            inner.addView(b, lp);
-        }
-        refresh(inner);
     }
 
     static void refresh(ViewGroup inner) {

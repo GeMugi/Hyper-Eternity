@@ -300,10 +300,6 @@ final class HeadsUpTweaks {
         }
     }
 
-    static int intOf(Object o) {
-        return o instanceof Integer ? ((Integer) o).intValue() : -1;
-    }
-
     static void place(View x, Object row) {
         try {
             // sem deslocar o conteúdo: o layout é o do próprio HyperOS (com a margem certa de sem botões)
@@ -380,18 +376,6 @@ final class HeadsUpTweaks {
         }
         box[0] = Math.min(box[0], t);
         box[1] = Math.max(box[1], b);
-    }
-
-    static String typeName(int t) {
-        return t == 0 ? "recolhida" : t == 1 ? "expandida" : t == 2 ? "heads-up" : t == 3 ? "linha única" : String.valueOf(t);
-    }
-
-    /** Resumo para o log: existe? tem botões? */
-    static String describe(View v) {
-        if (v == null) return "não";
-        int n = 0;
-        for (int i = 0; i < actionIds.length; i++) if (v.findViewById(actionIds[i]) != null) n++;
-        return n > 0 ? "com botões" : "sem botões";
     }
 
     /** Esconde (ou devolve) os botões de uma das versões; retorna quantas partes estão escondidas por nós. */
@@ -583,12 +567,6 @@ final class HeadsUpTweaks {
             }
         }
         return h;
-    }
-
-    /** Quando o conteúdo desta notificação mudou pela última vez (0 se o módulo não sabe). */
-    static long changedAt(StatusBarNotification s) {
-        long[] v = s != null ? seen.get(s.getKey()) : null;
-        return v != null ? v[1] : 0L;
     }
 
     /** Atualiza a assinatura; devolve {quando mudou, 1 se mudou agora}. */

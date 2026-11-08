@@ -348,6 +348,8 @@ final class KbBlur {
         }
     }
 
+    static final WeakHashMap<View, Drawable> fgOrig = new WeakHashMap<>();
+
     static final int[][] STATES = {
             {android.R.attr.state_pressed}, {android.R.attr.state_hovered}, {android.R.attr.state_selected},
             {android.R.attr.state_activated}, {android.R.attr.state_checked}, {}};
@@ -367,24 +369,6 @@ final class KbBlur {
         float g = keys * 0.5f * 255 / 100f;
         int na = Math.round(Math.min(255f, g * (0.45f + 1.3f * lum)) * a / 255f);
         return (na << 24) | 0xFFFFFF;
-    }
-
-    /** Dentro da barra de cima do teclado (atalhos do teclado aprimorado, sugestões)? */
-    private static boolean inHeader(View v) {
-        Boolean c = hdrCache.get(v);
-        if (c != null) return c;
-        boolean r = false;
-        Object p = v;
-        for (int i = 0; i < 12 && p instanceof View; i++) {
-            View x = (View) p;
-            try {
-                if (x.getId() > 0 && "keyboard_header_view_holder".equals(x.getResources().getResourceEntryName(x.getId()))) { r = true; break; }
-            } catch (Throwable ignored) {
-            }
-            p = x.getParent();
-        }
-        hdrCache.put(v, r);
-        return r;
     }
 
     private static int sig(View v, int d) {
@@ -568,6 +552,10 @@ final class KbBlur {
             }
         }
         orig.clear();
+        for (java.util.Map.Entry<View, Drawable> e : fgOrig.entrySet()) {
+            try { e.getKey().setForeground(e.getValue()); } catch (Throwable ignored) { }
+        }
+        fgOrig.clear();
         for (View m : miViews.keySet()) {
             try { View.class.getMethod("setMiBackgroundBlurMode", int.class).invoke(m, Integer.valueOf(0)); } catch (Throwable ignored) { }
         }

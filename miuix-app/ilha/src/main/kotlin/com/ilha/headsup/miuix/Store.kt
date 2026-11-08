@@ -124,6 +124,29 @@ class LinesPref(
     }
 }
 
+/** Ajuste em texto (as fontes próprias do Neon: "nome|carimbo", vazio = fonte padrão). */
+class StrPref(
+    private val put: (String, Any?) -> Unit,
+    val key: String,
+) : Resettable {
+    private val state = mutableStateOf("")
+
+    var value: String
+        get() = state.value
+        set(v) {
+            state.value = v
+            put(key, v)
+        }
+
+    override fun reset() {
+        state.value = ""
+    }
+
+    override fun load(all: Bundle) {
+        state.value = all.getString(key) ?: ""
+    }
+}
+
 /** Ajuste só deste app (aparência). */
 class LocalBool(private val sp: SharedPreferences, private val key: String, def: Boolean) {
     private val state = mutableStateOf(sp.getBoolean(key, def))
@@ -156,6 +179,7 @@ class Store(
     private fun b(key: String, def: Boolean) = BoolPref(put, key, def).also { all.add(it) }
     private fun i(key: String, def: Int) = IntPref(put, key, def).also { all.add(it) }
     private fun l(key: String) = LinesPref(put, key).also { all.add(it) }
+    private fun s(key: String) = StrPref(put, key).also { all.add(it) }
 
     // estado do módulo
     val connected = mutableStateOf(false)
@@ -208,7 +232,9 @@ class Store(
     val islandHide = b("island_hide", false)
     val playerIos = b("player_ios", false)
     val explicitE = b("explicit_e", false)
+    val playerOrigin = b("player_origin", false)
     val igGlass = b("ig_glass", false)
+    val igGlassStyle = i("ig_glass_style", 1)
     val kbBlur = b("kb_blur", false)
     val kbBlurR = i("kb_blur_r", 60)
     val kbBlurA = i("kb_blur_a", 45)
@@ -278,6 +304,15 @@ class Store(
     val mvTrack = i("mv_track", 22)
     val mvPlayed = i("mv_played", 85)
     val lyricShift = i("lyric_shift", 0)
+    val lyricDim = b("lyric_dim", false)
+    val lyricDimPct = i("lyric_dim_pct", 55)
+    val lyricVideo = b("lyric_video", false)
+    val lyricStyle = i("lyric_style", 0)
+    val lyricRain = b("lyric_rain", false)
+    val lyricRainAmt = i("lyric_rain_amt", 100)
+    val lyricRainSlide = i("lyric_rain_slide", 100)
+    val lyricStandby = b("lyric_standby", false)
+    val lyricFonts = List(8) { s("lyric_font_$it") }
 
     // Privacidade
     val privOn = b("priv_on", false)

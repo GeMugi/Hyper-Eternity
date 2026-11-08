@@ -44,6 +44,11 @@ public class ModernMain extends XposedModule {
                 if (claim("instagram")) IgGlass.install();
                 return;
             }
+            if ("com.yzc26623.HyperImmersive".equals(pk)) {
+                // StandBy da extensão HyperImmersive (HyperMusicCover): letras no nosso estilo
+                if (claim("standby")) StandbyLyrics.install(param.getDefaultClassLoader());
+                return;
+            }
             if (!"com.android.systemui".equals(pk)) return;
             if (!claim("systemui")) return;
             FullText.install("SystemUI");

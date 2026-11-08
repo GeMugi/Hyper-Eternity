@@ -281,34 +281,6 @@ final class IosMediaPage {
         c.clipOutRect(rs.left - th, cy - th * 0.9f, rs.right + th, cy + th * 0.9f);
     }
 
-    /** Cor da capa: a mais viva, clareada (como no outro player). */
-    static int tintOf(Bitmap b) {
-        if (b == null || b.isRecycled() || b == tintFrom) return tint;
-        tintFrom = b;
-        try {
-            Bitmap src = b.getConfig() == Bitmap.Config.HARDWARE ? b.copy(Bitmap.Config.ARGB_8888, false) : b;
-            Bitmap s = Bitmap.createScaledBitmap(src, 12, 12, true);
-            if (src != b) src.recycle();
-            float best = -1f;
-            float[] hsv = new float[3], pick = {210f, 0.35f, 1f};
-            for (int y = 0; y < 12; y++)
-                for (int x = 0; x < 12; x++) {
-                    android.graphics.Color.colorToHSV(s.getPixel(x, y), hsv);
-                    float sc = hsv[1] * (0.3f + hsv[2]);
-                    if (sc > best) {
-                        best = sc;
-                        pick = hsv.clone();
-                    }
-                }
-            if (s != b) s.recycle();
-            pick[1] = Math.min(pick[1], 0.5f);
-            pick[2] = 1f;
-            tint = android.graphics.Color.HSVToColor(pick);
-        } catch (Throwable ignored) {
-        }
-        return tint;
-    }
-
     static void after(Object v) throws Exception {
         if (aT < 0) return;
         ((RectF) fArt.get(v)).set(keep);

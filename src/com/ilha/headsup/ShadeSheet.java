@@ -245,6 +245,7 @@ final class ShadeSheet {
                 XposedBridge.hookMethod(k, new XC_MethodHook() {
                     protected void afterHookedMethod(MethodHookParam p) {
                         expandCtl = p.thisObject;
+                        if (emitBroken) expandCallback(p.thisObject);
                     }
                 });
             }
@@ -267,7 +268,11 @@ final class ShadeSheet {
                 }
             });
             } catch (Throwable t) {
-                ElasticCard.log("cortina: passo 2 (progresso da abertura): " + t);
+                // HyperOS 4 (algumas versões): as classes do Kotlin vêm com nomes trocados e o coletor
+                // interno não é encontrado; o progresso vem pelo retorno de chamada público da central
+                emitBroken = true;
+                ElasticCard.log("cortina: passo 2 (progresso da abertura) pelo retorno de chamada: " + t);
+                if (expandCtl != null) expandCallback(expandCtl);
             }
             // conteúdo: os cartões não fazem a entrada do HyperOS, já estão prontos dentro da cortina
             try {
@@ -446,17 +451,6 @@ final class ShadeSheet {
                 hookSources(cl);
             } catch (Throwable t) {
                 ElasticCard.log("cortina: passo 9 (toques): " + t);
-            }
-            // teste: o vidro do HyperOS 4 (setMiGlass / setMiViewMaterialType) existe neste sistema?
-            try {
-                StringBuilder gl = new StringBuilder();
-                for (java.lang.reflect.Method m : View.class.getMethods()) {
-                    String n = m.getName();
-                    if (n.contains("Glass") || n.contains("MaterialType") || n.contains("Sdf")) gl.append(n).append(java.util.Arrays.toString(m.getParameterTypes())).append(' ');
-                }
-                ElasticCard.log("teste vidro HOS4: " + (gl.length() == 0 ? "nenhum método de vidro neste sistema" : gl));
-            } catch (Throwable t) {
-                ElasticCard.log("teste vidro HOS4: " + t);
             }
             ElasticCard.log("cortina: pronta");
         } catch (Throwable t) {
@@ -790,6 +784,45 @@ final class ShadeSheet {
 
     static int closeLogs;
 
+    static boolean emitBroken, cbAdded;
+
+    /** Registra um ouvinte (PanelExpandController.Callback, interface pública dos plugins) na central. */
+    static void expandCallback(Object ctl) {
+        if (cbAdded) return;
+        try {
+            java.lang.reflect.Method add = null;
+            for (java.lang.reflect.Method m : ctl.getClass().getMethods()) {
+                if (m.getName().equals("addCallback") && m.getParameterTypes().length == 1 && m.getParameterTypes()[0].isInterface()) { add = m; break; }
+            }
+            if (add == null) throw new NoSuchMethodException("addCallback");
+            Class<?> cb = add.getParameterTypes()[0];
+            Object proxy = java.lang.reflect.Proxy.newProxyInstance(cb.getClassLoader(), new Class[]{cb}, new java.lang.reflect.InvocationHandler() {
+                public Object invoke(Object pr, java.lang.reflect.Method m, Object[] a) {
+                    String n = m.getName();
+                    if ("onExpansionChanged".equals(n) && a != null && a.length > 0 && a[0] instanceof Number) {
+                        try { apply(((Number) a[0]).floatValue()); } catch (Throwable t) { ElasticCard.log("cortina: " + t); }
+                        return null;
+                    }
+                    if ("equals".equals(n)) return Boolean.valueOf(a != null && a.length > 0 && pr == a[0]);
+                    if ("hashCode".equals(n)) return Integer.valueOf(System.identityHashCode(pr));
+                    if ("toString".equals(n)) return "HyperEternityCurtain";
+                    Class<?> r = m.getReturnType();
+                    if (r == boolean.class) return Boolean.FALSE;
+                    if (r == int.class) return Integer.valueOf(0);
+                    if (r == float.class) return Float.valueOf(0f);
+                    if (r == long.class) return Long.valueOf(0L);
+                    return null;
+                }
+            });
+            add.setAccessible(true);
+            add.invoke(ctl, proxy);
+            cbAdded = true;
+            ElasticCard.log("cortina: progresso da abertura pelo retorno de chamada (" + cb.getName() + ")");
+        } catch (Throwable t) {
+            ElasticCard.log("cortina: retorno de chamada indisponível: " + t);
+        }
+    }
+
     static float expandHeight() {
         try {
             return ((Number) expandCtl.getClass().getMethod("getExpandHeight").invoke(expandCtl)).floatValue();
@@ -800,41 +833,6 @@ final class ShadeSheet {
 
     static java.lang.reflect.Field fExpH;
     static Object npvcRef;
-
-    /** NotificationPanelViewController.mExpandedHeight: quanto a central está aberta, em pixels. */
-    static float expandedPx() {
-        try {
-            if (npvcRef == null) {
-                Object lz = Refl.get(expandCtl, "panelViewController");
-                npvcRef = lz.getClass().getMethod("get").invoke(lz);
-            }
-            if (fExpH == null) {
-                fExpH = Refl.field(npvcRef.getClass(), "mExpandedHeight");
-                fExpH.setAccessible(true);
-            }
-            return fExpH.getFloat(npvcRef);
-        } catch (Throwable t) {
-            if (nativeLogs++ < 6) ElasticCard.log("cortina: altura da central indisponível: " + t);
-            return Float.NaN;
-        }
-    }
-
-    /** Começo da abertura do sistema: o visual da cortina entra, escondido acima da tela. */
-    static void beginNative(View v) {
-        closingWait = false;
-        if ((splitTx || splitLp != null) && nssl != null) splitOff(nssl);
-        if (v.getAlpha() != 1f) v.setAlpha(1f);
-        float h = v.getHeight() > 0 ? v.getHeight() : v.getResources().getDisplayMetrics().heightPixels;
-        on = true;
-        v.setTranslationY(-h);
-        if (!Prefs.sheetBlur) background(v);
-        follow(v, 0f, 1f);
-        deco(v, true);
-        hookPreDraw(v);
-        round(v);
-        if (!Prefs.sheetBlur) hideMiui(v);
-        layoutList(v, true);
-    }
 
     static void apply(float f) {
         // a abertura agora é do nosso gesto; aqui só encerra quando a central fecha de outro jeito
@@ -1976,38 +1974,6 @@ final class ShadeSheet {
         }
     }
 
-    /** Cortina: o cartão que chega na lanterna/câmera vai apagando (o resto é cortado no desenho da lista). */
-    static void fadeBottom(Object ssa) {
-        try {
-            if (StackHooks.fHost == null || StackHooks.fTempState == null || StackHooks.fVisible == null) return;
-            View host = (View) StackHooks.fHost.get(ssa);
-            Object st = StackHooks.fTempState.get(ssa);
-            Object vis = st == null ? null : StackHooks.fVisible.get(st);
-            if (host == null || !(vis instanceof java.util.List)) return;
-            float lim = buttonLimit(host);
-            if (Float.isNaN(lim)) return;
-            float d = host.getResources().getDisplayMetrics().density;
-            lim += 10 * d;
-            for (Object c : (java.util.List) vis) {
-                Object vs = Refl.call(c, "getViewState");
-                if (vs == null) continue;
-                float y = vsF(vs, "mYTranslation");
-                int h = Refl.field(vs.getClass(), "height").getInt(vs);
-                if (h <= 0 || y + h <= lim) continue;
-                float o = y + h - lim;
-                float k = StackMath.clamp(1f - o / (h * 0.55f), 0f, 1f);
-                float a = Refl.field(vs.getClass(), "mAlpha").getFloat(vs);
-                GroupStack.call(vs, "setAlpha", a * k);
-                if (k <= 0f) {
-                    java.lang.reflect.Field fh = Refl.field(vs.getClass(), "hidden");
-                    if (fh != null) fh.setBoolean(vs, true);
-                }
-            }
-        } catch (Throwable t) {
-            if (fadeLogs++ < 4) ElasticCard.log("cortina: apagar no fim: " + t);
-        }
-    }
-
     /** Topo dos botões de baixo da cortina (com folga), nas coordenadas da lista; NaN sem botões. */
     static float buttonLimit(View host) {
         try {
@@ -2457,43 +2423,6 @@ final class ShadeSheet {
     static View band;
     static float bandFor = -1;
 
-    /**
-     * Desfoque de cima (como o cabeçalho do HyperOS): cobre o relógio e termina em degradê onde a
-     * lista começa, então os cartões somem desfocando ao rolar para cima, seguindo a posição do relógio.
-     */
-    static void topBlur(View deco, float listTopWin) {
-        try {
-            if (!(deco.getParent() instanceof ViewGroup) || !TopBlur.init(deco.getClass().getClassLoader())) return;
-            ViewGroup root = (ViewGroup) deco.getParent();
-            float d = deco.getResources().getDisplayMetrics().density;
-            if (band == null) band = TopBlur.makeBand(root.getContext());
-            if (band.getParent() != root) {
-                if (band.getParent() != null) ((ViewGroup) band.getParent()).removeView(band);
-                int idx = root.indexOfChild(deco);
-                if (Kg.box != null && Kg.box.getParent() == root) idx = Math.min(idx, root.indexOfChild(Kg.box));
-                root.addView(band, Math.max(0, idx), new ViewGroup.LayoutParams(-1, -1));
-                band.setVisibility(View.VISIBLE);
-                TopBlur.mBgMode.invoke(band, Integer.valueOf(1));
-                TopBlur.mViewMode.invoke(band, Integer.valueOf(1));
-                if (TopBlur.mBgType != null) TopBlur.mBgType.invoke(band, Integer.valueOf(2));
-                bandFor = -1;
-            }
-            int[] l = new int[2];
-            root.getLocationInWindow(l);
-            float y = listTopWin - l[1] - root.getTranslationY();
-            int h = Math.round(y + 14 * d);
-            if (Math.abs(bandFor - y) >= 1f || band.getHeight() != h) {
-                band.layout(0, 0, root.getWidth(), h);
-                float[] p = new float[]{0f, Math.max(0f, y - 46 * d), 40f * d, 0f, h, 0f};
-                TopBlur.mGrad.invoke(band, p, Integer.valueOf(1));
-                bandFor = y;
-                band.invalidate();
-            }
-        } catch (Throwable t) {
-            ElasticCard.log("cortina desfoque de cima: " + t);
-        }
-    }
-
     static View bottomBand;
     static int bbTop = Integer.MIN_VALUE, bbLogs;
 
@@ -2681,19 +2610,6 @@ final class ShadeSheet {
         for (View c : new View[]{blurL, blurR}) if (c != null && c.getParent() instanceof ViewGroup) ((ViewGroup) c.getParent()).removeView(c);
         if (band != null && band.getParent() instanceof ViewGroup) ((ViewGroup) band.getParent()).removeView(band);
         bandFor = -1;
-    }
-
-    /** A lista não passa por baixo do relógio: corta acima da linha "Notificações". */
-    static void clipList(float windowY) {
-        try {
-            if (nssl == null || !sheet()) return;
-            int[] l = new int[2];
-            nssl.getLocationInWindow(l);
-            int top = Math.max(0, Math.round(windowY - l[1] - nssl.getTranslationY()));
-            android.graphics.Rect r = nssl.getClipBounds();
-            if (r == null || r.top != top || r.bottom != nssl.getHeight() + 4000) nssl.setClipBounds(new android.graphics.Rect(-200, top, nssl.getWidth() + 200, nssl.getHeight() + 4000));
-        } catch (Throwable ignored) {
-        }
     }
 
     static View findCls(View v, String suffix, int depth) {

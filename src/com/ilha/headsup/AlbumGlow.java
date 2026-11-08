@@ -671,11 +671,6 @@ final class AlbumGlow {
         }
     }
 
-    static int withAlpha(int c, float a) {
-        int al = Math.round(clamp(a) * 255f);
-        return (al << 24) | (c & 0x00FFFFFF);
-    }
-
     static float clamp(float v) {
         return v < 0f ? 0f : v > 1f ? 1f : v;
     }

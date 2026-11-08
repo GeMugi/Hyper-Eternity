@@ -60,6 +60,10 @@
             android:authorities="com.ilha.headsup.bridge"
             android:exported="false" />
         <provider
+            android:name="com.ilha.headsup.FontProvider"
+            android:authorities="com.ilha.headsup.lyricfonts"
+            android:exported="true" />
+        <provider
             android:name="com.ilha.headsup.AgendaProvider"
             android:authorities="com.ilha.headsup.agenda"
             android:exported="true" />

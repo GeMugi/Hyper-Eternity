@@ -8,7 +8,7 @@ public final class Keys {
     public static final String FILE = "ajustes";
     /** Grupo das preferências remotas do LSPosed (o app escreve, a Interface do Sistema lê). */
     public static final String GROUP = "ilha";
-    public static final String VERSION = "7.9.61";
+    public static final String VERSION = "7.9.62";
 
     public static final String HU_ENABLED = "hu_enabled";
     public static final String HU_STYLE = "hu_style";        // 0 = OriginOS (sai da ilha), 1 = iOS (sai do ícone do app)
@@ -21,6 +21,22 @@ public final class Keys {
     public static final boolean D_HU_HIDE_ARROW = false;
     public static final String EXPLICIT_E = "explicit_e";
     public static final boolean D_EXPLICIT_E = false;
+    public static final String PLAYER_ORIGIN = "player_origin";
+    public static final boolean D_PLAYER_ORIGIN = false;
+    public static final String LYRIC_VIDEO = "lyric_video";
+    public static final boolean D_LYRIC_VIDEO = false;
+    public static final String LYRIC_STANDBY = "lyric_standby";   // também no StandBy do HyperImmersive
+    public static final boolean D_LYRIC_STANDBY = false;
+    public static final String LYRIC_STYLE = "lyric_style";
+    public static final int D_LYRIC_STYLE = 0;
+    public static final String LYRIC_RAIN = "lyric_rain";
+    public static final boolean D_LYRIC_RAIN = false;
+    public static final String LYRIC_RAIN_AMT = "lyric_rain_amt", LYRIC_RAIN_SLIDE = "lyric_rain_slide";
+    public static final int D_LYRIC_RAIN_AMT = 100, D_LYRIC_RAIN_SLIDE = 100;
+    public static final String LYRIC_DIM = "lyric_dim", LYRIC_DIM_PCT = "lyric_dim_pct";
+    public static final boolean D_LYRIC_DIM = false;
+    public static final int D_LYRIC_DIM_PCT = 55;
+    public static final String LYRIC_FONT = "lyric_font_";   // + posição 0..7: "nome do arquivo|carimbo" (vazio = fonte padrão)
     public static final String PLAYER_IOS = "player_ios";
     public static final boolean D_PLAYER_IOS = false;
     public static final String ISLAND_HIDE = "island_hide";
@@ -28,6 +44,8 @@ public final class Keys {
     public static final String KB_RESTART = "kb_restart";
     public static final String IG_GLASS = "ig_glass";
     public static final boolean D_IG_GLASS = false;
+    public static final String IG_GLASS_STYLE = "ig_glass_style";
+    public static final int D_IG_GLASS_STYLE = 1;
     public static final String KB_BLUR = "kb_blur", KB_BLUR_R = "kb_blur_r", KB_BLUR_A = "kb_blur_a";
     public static final boolean D_KB_BLUR = false;
     public static final int D_KB_BLUR_R = 60, D_KB_BLUR_A = 45;

@@ -38,6 +38,9 @@ public final class Main {
             IslandHide.install();
             IosPlayer.install();
             Explicit.install(cl);
+            HmcFix.install(cl);
+            OriginPlayer.install(cl);
+            LyricVideo.install(cl);
             ClockDots.install(cl);
             LockWidgets.install(cl);
         GroupStack.install(cl);

@@ -368,24 +368,6 @@ final class StackHooks {
         }
     }
 
-    static void setHidden(final boolean h) {
-        float target = h ? 1f : 0f;
-        if (kgHidden == h && hideP == target) return;
-        kgHidden = h;
-        if (hideAnim != null) hideAnim.cancel();
-        hideAnim = android.animation.ValueAnimator.ofFloat(hideP, target);
-        hideAnim.setDuration(Math.round(340 * Math.abs(target - hideP)) + 1);
-        hideAnim.setInterpolator(new android.view.animation.PathInterpolator(0.3f, 0f, 0.1f, 1f));
-        hideAnim.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
-            public void onAnimationUpdate(android.animation.ValueAnimator va) {
-                hideP = ((Float) va.getAnimatedValue()).floatValue();
-                updateNssl();
-            }
-        });
-        hideAnim.start();
-        ElasticCard.log(h ? "bloqueio: notificações escondidas (deslizar para baixo)" : "bloqueio: notificações de volta");
-    }
-
     static void updateNssl() {
         View s = nsslRef;
         if (s == null) return;
