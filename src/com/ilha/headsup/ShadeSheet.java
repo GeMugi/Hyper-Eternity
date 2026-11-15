@@ -368,7 +368,12 @@ final class ShadeSheet {
                         protected void beforeHookedMethod(MethodHookParam p) {
                             if (!NATIVE || !nOn || bypass || postSlide || switchingNow) return;
                             if (!(takeover || sliding || !pending.isEmpty())) return;
-                            if (((Number) p.args[0]).floatValue() < 0.999f) p.setResult(null);
+                            if (((Number) p.args[0]).floatValue() < 0.999f) {
+                                // guardado: se o HyperOS não repetir o pedido depois de a cortina subir, o
+                                // desfoque ficava ligado e a próxima heads-up chegava com a tela toda borrada
+                                heldBlur = new Object[]{p.method, p.thisObject, p.args.clone()};
+                                p.setResult(null);
+                            } else heldBlur = null;
                         }
                     });
                 }
@@ -578,6 +583,7 @@ final class ShadeSheet {
             natDeco = true;
             hookPreDraw(v);
             deco(v, true);
+            round(v);   // "Cantos arredondados na cortina" também quando a central original desce
             layoutList(v, true);
             if (decoV != null) decoV.invalidate();
         } catch (Throwable t) {
@@ -589,6 +595,11 @@ final class ShadeSheet {
         if (!natDeco) return;
         natDeco = false;
         try {
+            if (clipped) {
+                v.setClipToOutline(false);
+                v.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+                clipped = false;
+            }
             deco(v, false);
             layoutList(v, false);
             if (listExtra != 0) { listExtra = 0; requestStack(); }
@@ -674,6 +685,23 @@ final class ShadeSheet {
     }
 
     static int deferLogs;
+    static Object[] heldBlur;
+    static int blurLogs;
+
+    /** Entrega ao HyperOS o último pedido de baixar o desfoque que seguramos enquanto a cortina fechava. */
+    static void releaseBlur() {
+        Object[] h = heldBlur;
+        if (h == null || takeover || sliding || !pending.isEmpty()) return;
+        heldBlur = null;
+        try {
+            java.lang.reflect.Method m = (java.lang.reflect.Method) h[0];
+            m.setAccessible(true);
+            m.invoke(h[1], (Object[]) h[2]);
+            if (blurLogs++ < 10) ElasticCard.log("cortina: desfoque da central devolvido (" + ((Object[]) h[2])[0] + ")");
+        } catch (Throwable t) {
+            if (blurLogs++ < 10) ElasticCard.log("cortina: desfoque não devolvido: " + t);
+        }
+    }
 
     static void beginClose() {
         slideUp(new Runnable() {
@@ -771,9 +799,11 @@ final class ShadeSheet {
                 nDownShown = 0f;
                 sliding = false;
                 then.run();
+                releaseBlur();
                 v.postDelayed(new Runnable() {
                     public void run() {
                         if (postSlide) { postSlide = false; nativeOffHidden(v); }
+                        releaseBlur();
                     }
                 }, 1600);
             }
@@ -1422,9 +1452,15 @@ final class ShadeSheet {
         }
     }
 
+    static java.lang.reflect.Method mExpVis;
+
     static boolean expanded() {
         try {
-            return Boolean.TRUE.equals(shadeCtl.getClass().getMethod("isExpandedVisible").invoke(shadeCtl));
+            Object sc = shadeCtl;
+            if (sc == null) return false;
+            java.lang.reflect.Method m = mExpVis;
+            if (m == null || m.getDeclaringClass() != sc.getClass() && !m.getDeclaringClass().isInstance(sc)) mExpVis = m = sc.getClass().getMethod("isExpandedVisible");
+            return Boolean.TRUE.equals(m.invoke(sc));
         } catch (Throwable t) {
             return false;
         }

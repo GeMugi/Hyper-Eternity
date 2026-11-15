@@ -273,6 +273,11 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        // voltou do instalador: se a extensão entrou ou mudou de versão, refaz a aba
+        if (extShown && nav == 2 && tab < 0) {
+            String now = ExtInstall.installed(this);
+            if (!(now == null ? shownExt == null : now.equals(shownExt))) showPage(-1);
+        }
         RemoteSync.watch(statusPaint);
         paintStatus();
         // o LSPosed entrega o serviço logo depois que o app abre; se não vier, avisa
@@ -633,6 +638,8 @@ public class SettingsActivity extends Activity {
         // refazendo a página em que já está (uma opção mudou): continua no mesmo ponto da lista
         int oldTab = tab, oldNav = nav;
         int y0 = scrollView != null && content != null && content.getChildCount() > 0 ? scrollView.getScrollY() : -1;
+        if (p != tab) sub = -1;
+        if (subFresh) { y0 = -1; subFresh = false; }
         if (p >= 0) nav = 1;
         tab = p;
         ui.edit().putInt("aba", p).apply();
@@ -640,7 +647,7 @@ public class SettingsActivity extends Activity {
         String name = Tr.t(root ? NAVS[nav] : PAGES[p]);
         bigTitle.setText(name);
         if (pageTitle != null) pageTitle.setText(name);
-        back.setText("‹  " + Tr.t("Recursos"));
+        back.setText("‹  " + Tr.t(sub >= 0 && !root ? PAGES[p] : "Recursos"));
         privSub = 0;
         back.setVisibility(root ? View.GONE : View.VISIBLE);
         header.setVisibility(root && nav == 0 ? View.VISIBLE : View.GONE);
@@ -660,8 +667,13 @@ public class SettingsActivity extends Activity {
             else if (p == 3) buildBloqueio(content);
             else if (p == 4) buildCentral(content);
             else if (p == 5) buildBarra(content);
-            else if (p == 6) buildMusic(content);
-            else buildPrivacidade(content);
+            else if (p == 6) {
+                buildMusic(content);
+                if (sub >= 0) {
+                    bigTitle.setText(Tr.t(MUSIC_SUBS[sub]));
+                    if (pageTitle != null) pageTitle.setText(Tr.t(MUSIC_SUBS[sub]));
+                }
+            } else buildPrivacidade(content);
         } else if (nav == 0) buildInicio(content);
         else if (nav == 1) buildRecursos(content);
         else if (nav == 2) buildExtensoes(content);
@@ -945,33 +957,199 @@ public class SettingsActivity extends Activity {
     }
 
     private void buildExtensoes(LinearLayout page) {
-        if (!musicInstalled()) {
-            LinearLayout c = section(page, "HyperMusicCover-Enhanced");
-            para(c, "Capa do álbum e letras sincronizadas no bloqueio (HyperMusicCover-Enhanced, adaptado ao HyperOS 3). É um APK separado: instale a extensão \"HyperMusicCover-Enhanced\", ative no LSPosed e reinicie.");
-            return;
-        }
-        LinearLayout mu = section(page, "Capa e letras no bloqueio");
-        TextView about = text("Player do bloqueio com capa em destaque e letras sincronizadas, do HyperMusicCover-Enhanced.", 14, cText, false);
-        about.setPadding(dp(16), dp(12), dp(16), dp(4));
-        mu.addView(about);
-        LinearLayout open = row();
-        open.addView(button("Abrir ajustes da música", true, new View.OnClickListener() {
-            public void onClick(View v) {
-                openMusicSettings();
-            }
-        }), weight());
-        mu.addView(open);
-        mu.addView(note("A tela da música é a original, em inglês. Desinstale o HyperMusicCover separado, se tiver."));
-
+        buildRelogios(page);
+        final boolean mi = musicInstalled();
+        android.graphics.drawable.Drawable mIcon = null;
+        if (mi) try { mIcon = getPackageManager().getApplicationIcon(MUSIC_PKG); } catch (Throwable ignored) {}
+        if (mIcon == null) mIcon = assetIcon("hmc_icon.png");
+        String mVer = null;
+        if (mi) try { mVer = getPackageManager().getPackageInfo(MUSIC_PKG, 0).versionName; } catch (Throwable ignored) {}
+        extCard(page, mIcon, "HyperMusicCover", null,
+                "Capa e letras no bloqueio",
+                mi ? (mVer == null ? "?" : mVer) : null, null,
+                new View.OnClickListener() {
+                    public void onClick(View v) {
+                        if (mi) openMusicSettings();
+                        else openUrl("https://github.com/Lewewe/HyperMusicCover-Enhanced/releases");
+                    }
+                });
+        if (!mi) return;
         LinearLayout sy = section(page, "Sincronia das letras");
-        slider(sy, "Adiantar a letra", "Quanto a letra anda à frente da música. Atrasada, aumente; adiantada, diminua.", Keys.LYRIC_SHIFT, Keys.D_LYRIC_SHIFT, -20, 30, "ds");
-        sy.addView(note("Versões de clipe podem ter cortes diferentes do álbum, e a letra pode não bater em algum trecho."));
+        slider(sy, "Adiantar a letra", "Atrasada, aumente; adiantada, diminua.", Keys.LYRIC_SHIFT, Keys.D_LYRIC_SHIFT, -20, 30, "ds");
 
         LinearLayout il = section(page, "Ilha no bloqueio");
-        TextView isl = text("A ilha do bloqueio é a do HyperMusicCover. Ligue em Abrir ajustes da música → \"Lock screen super island\". Para o vidro fosco, ligue \"Blur background\" na mesma tela.", 14, cText, false);
+        TextView isl = text("Ligue \"Lock screen super island\" e \"Blur background\" nos ajustes da música. A tela da música é a original, em inglês.", 14, cText, false);
         isl.setPadding(dp(16), dp(12), dp(16), dp(12));
         il.addView(isl);
+    }
 
+    private void openUrl(String u) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(u)));
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private android.graphics.drawable.Drawable assetIcon(String name) {
+        try {
+            java.io.InputStream in = getAssets().open(name);
+            android.graphics.Bitmap b = android.graphics.BitmapFactory.decodeStream(in);
+            in.close();
+            return new android.graphics.drawable.BitmapDrawable(getResources(), b);
+        } catch (Throwable t) {
+            return round(cAccent, 14);
+        }
+    }
+
+    /** Pílula com contorno (selo "Beta", "Instalada", botão "Baixar"). */
+    private TextView pill(String s, int color, float sp) {
+        TextView t = text(s, sp, color, false);
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(dp(40));
+        g.setStroke(dp(1.5f), color);
+        g.setColor(0);
+        t.setBackground(g);
+        t.setGravity(Gravity.CENTER);
+        t.setSingleLine(true);
+        return t;
+    }
+
+    /**
+     * Cartão de uma extensão, como a lista do HyperMusicCover: ícone, nome com selo, descrição e,
+     * à direita, "Baixar" com a versão ou "Instalada" com a seta. Devolve a linha de andamento.
+     */
+    private TextView extCard(LinearLayout page, android.graphics.drawable.Drawable icon, String name, String badge, String desc,
+                             String installedVer, String latestVer, View.OnClickListener action) {
+        return extCard(page, icon, name, badge, desc, installedVer, latestVer, "Baixar", action);
+    }
+
+    private TextView extCard(LinearLayout page, android.graphics.drawable.Drawable icon, String name, String badge, String desc,
+                             String installedVer, String latestVer, String label, View.OnClickListener action) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setBackground(glassCard(24));
+        card.setPadding(dp(14), dp(14), dp(12), dp(14));
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, -2);
+        clp.topMargin = dp(12);
+        page.addView(card, clp);
+
+        android.widget.ImageView iv = new android.widget.ImageView(this);
+        iv.setImageDrawable(icon);
+        iv.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        iv.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            public void getOutline(View v, android.graphics.Outline o) {
+                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(13));
+            }
+        });
+        iv.setClipToOutline(true);
+        card.addView(iv, new LinearLayout.LayoutParams(dp(50), dp(50)));
+
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        TextView title = text(name, 16, cText, true);
+        if (badge != null) {
+            // selo dentro do próprio título: fica colado ao nome e quebra junto se faltar espaço
+            android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder(Tr.t(name)).append("  ");
+            int st0 = sb.length();
+            sb.append(Tr.t(badge));
+            sb.setSpan(new BadgeSpan(cSub, dp(1.2f), dp(6), dp(11.5f)), st0, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            title.setText(sb);
+        }
+        title.setMaxLines(2);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        texts.addView(title);
+        if (installedVer != null) {
+            TextView v = text(Tr.t("Versão") + ": " + installedVer, 13, cSub, false);
+            v.setPadding(0, dp(2), 0, 0);
+            texts.addView(v);
+        }
+        TextView d = text(desc, 13, cSub, false);
+        d.setPadding(0, dp(installedVer != null ? 0 : 2), 0, 0);
+        d.setMaxLines(2);
+        d.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        texts.addView(d);
+        TextView status = text("", 12.5f, cAccent, false);
+        status.setVisibility(View.GONE);
+        status.setPadding(0, dp(4), 0, 0);
+        texts.addView(status);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, -2, 1f);
+        tlp.leftMargin = dp(12);
+        tlp.rightMargin = dp(8);
+        card.addView(texts, tlp);
+
+        LinearLayout right = new LinearLayout(this);
+        right.setOrientation(LinearLayout.HORIZONTAL);
+        right.setGravity(Gravity.CENTER_VERTICAL);
+        if (installedVer != null) {
+            TextView ok = pill("Instalada", 0xFF34A853, 12);
+            ok.setPadding(dp(9), dp(3), dp(9), dp(4));
+            right.addView(ok);
+            TextView arrow = text("›", 22, cSub, false);
+            arrow.setPadding(dp(8), 0, dp(2), dp(3));
+            right.addView(arrow);
+        } else {
+            LinearLayout col = new LinearLayout(this);
+            col.setOrientation(LinearLayout.VERTICAL);
+            col.setGravity(Gravity.CENTER_HORIZONTAL);
+            TextView dl = pill("↓ " + Tr.t(label), cAccent, 12.5f);
+            dl.setPadding(dp(10), dp(4), dp(10), dp(5));
+            dl.setOnClickListener(action);
+            col.addView(dl);
+            if (latestVer != null) {
+                TextView lv = text(latestVer, 12, cSub, false);
+                lv.setPadding(0, dp(4), 0, 0);
+                col.addView(lv);
+            }
+            right.addView(col);
+        }
+        card.addView(right);
+        TypedValue tv = new TypedValue();
+        if (installedVer != null) {
+            if (getTheme().resolveAttribute(android.R.attr.selectableItemBackground, tv, true)) card.setForeground(getDrawable(tv.resourceId));
+            card.setOnClickListener(action);
+        }
+        return status;
+    }
+
+    /** Versão da extensão mostrada no cartão (para refazer a aba quando instalar ou atualizar). */
+    private String shownExt;
+    private boolean extShown;
+
+    /** Extensão Hyper Eternity Relógios: baixar, atualizar e abrir. */
+    private void buildRelogios(LinearLayout page) {
+        extShown = true;
+        final String inst = ExtInstall.installed(this);
+        final String lat = ExtInstall.latest;
+        shownExt = inst;
+        final boolean upd = inst != null && lat != null && ExtInstall.newer(lat, inst);
+        String desc = "Relógios All in One no bloqueio e patcher de bibliotecas";
+        final TextView st = extCard(page, assetIcon("relogios_icon.png"), "Relógios HOS4", "Beta",
+                upd ? Tr.t("Instalada") + ": " + inst : desc,
+                upd ? null : inst, lat, upd ? "Atualizar" : "Baixar",
+                new View.OnClickListener() {
+                    public void onClick(View v) {
+                        if (inst != null && !upd) {
+                            if (!ExtInstall.open(SettingsActivity.this)) Toast.makeText(SettingsActivity.this, Tr.t("Não consegui abrir a extensão"), Toast.LENGTH_SHORT).show();
+                        } else {
+                            ExtInstall.run(SettingsActivity.this);
+                        }
+                    }
+                });
+        if (ExtInstall.last.length() > 0) {
+            st.setText(ExtInstall.last);
+            st.setVisibility(View.VISIBLE);
+        }
+        ExtInstall.listener = new ExtInstall.Listener() {
+            public void status(String text, boolean busy) {
+                st.setText(text);
+                st.setVisibility(text.length() > 0 ? View.VISIBLE : View.GONE);
+                String now = ExtInstall.installed(SettingsActivity.this);
+                boolean changed = !(now == null ? inst == null : now.equals(inst)) || (ExtInstall.latest != null && !ExtInstall.latest.equals(lat));
+                if (!busy && changed && nav == 2 && tab < 0) showPage(-1);
+            }
+        };
+        ExtInstall.peek();   // procura de novo ao abrir a aba (no máximo uma vez por minuto)
     }
 
     // ------------------------------------------------------------------ Ajustes do app
@@ -984,7 +1162,7 @@ public class SettingsActivity extends Activity {
         choice(lg, "Idioma do app", new String[]{"Automático", "Português", "English", "Español"}, "lang", 0, true);
         para(lg, "Os ajustes da música (HyperMusicCover) seguem em inglês.");
         LinearLayout lo = section(page, "Registros");
-        para(lo, "Os registros ficam no LSPosed (Registros → Módulos). Copie o resumo abaixo para mandar junto.");
+        para(lo, "Os registros ficam no LSPosed; copie o resumo para mandar junto.");
         LinearLayout r = row();
         r.addView(button("Copiar resumo dos ajustes", false, new View.OnClickListener() {
             public void onClick(View v) {
@@ -1025,7 +1203,6 @@ public class SettingsActivity extends Activity {
             }
         }), weight());
         ie.addView(r2);
-        ie.addView(note("Salva ou carrega todos os ajustes num arquivo. A música tem o próprio importar/exportar."));
         buildSistema(page);
     }
 
@@ -1197,7 +1374,7 @@ public class SettingsActivity extends Activity {
     /** As 8 fontes do estilo Neon: cada uma pode ser trocada por um arquivo .ttf/.otf do aparelho. */
     private void neonFonts(LinearLayout page) {
         LinearLayout sec = section(page, "Fontes do Neon");
-        sec.addView(note("As fileiras coloridas (tubo neon) sorteiam entre as fontes 1 a 5; as de contorno branco, entre 6 a 8. Toque em Trocar e escolha um arquivo de fonte (.ttf ou .otf); Padrão volta para a fonte original."));
+        sec.addView(note("Fontes 1 a 5 são do neon colorido; 6 a 8, do contorno branco."));
         for (int i = 0; i < 8; i++) {
             final int slot = i;
             String cur = prefs.getString(Keys.LYRIC_FONT + i, "");
@@ -1637,7 +1814,9 @@ public class SettingsActivity extends Activity {
 
     // ------------------------------------------------------------------ Privacidade
 
-    private int privSub;          // 0 página, 1 lista de apps, 2 conversas de um app
+    private int privSub;
+    private int sub = -1;         // categoria aberta dentro da página (-1: a lista de categorias)
+    private boolean subFresh;          // 0 página, 1 lista de apps, 2 conversas de um app
     private String privPkg;
 
     private java.util.LinkedHashSet<String> getLines(String key) {
@@ -1658,7 +1837,7 @@ public class SettingsActivity extends Activity {
     private void buildPrivacidade(LinearLayout page) {
         privSub = 0;
         LinearLayout c = section(page, "Privacidade");
-        toggle(c, "Esconder conteúdo (teste)", "Desfoca as notificações dos apps e conversas escolhidos. Um toque mostra sem abrir o app. Aparece sozinho com o rosto reconhecido ou desbloqueado.", Keys.PRIV_ON, Keys.D_PRIV_ON);
+        toggle(c, "Esconder conteúdo (teste)", "Desfoca as notificações escolhidas; toque para ver.", Keys.PRIV_ON, Keys.D_PRIV_ON);
         toggle(c, "Esconder também desbloqueado", "Mesmo desbloqueado, só aparece tocando.", Keys.PRIV_UNLOCKED, Keys.D_PRIV_UNLOCKED);
         LinearLayout l = section(page, "O que esconder");
         int na = getLines(Keys.PRIV_APPS).size(), nc = getLines(Keys.PRIV_CONVS).size();
@@ -1678,7 +1857,7 @@ public class SettingsActivity extends Activity {
                 showContacts();
             }
         });
-        l.addView(note("Conversas aparecem na lista depois da primeira notificação delas. Contatos valem pelo nome salvo na agenda."));
+        l.addView(note("Conversas aparecem depois da primeira notificação."));
     }
 
     private void privEntry(LinearLayout card, String name, String help, View.OnClickListener l) {
@@ -1884,8 +2063,14 @@ public class SettingsActivity extends Activity {
             showConvApps();
             return;
         }
+        if (content != null && sub >= 0 && tab >= 0) {
+            sub = -1;
+            subFresh = true;
+            showPage(tab);
+            return;
+        }
         if (content != null && privSub == 1) {
-            showPage(5);
+            showPage(7);
             return;
         }
         if (content != null && tab >= 0) {
@@ -1921,7 +2106,7 @@ public class SettingsActivity extends Activity {
     private void buildHeadsUp(LinearLayout page) {
         // Heads-up: liga/desliga, estilo com os ajustes dele logo embaixo, teste
         LinearLayout hu = section(page, "Heads-up");
-        toggle(hu, "Efeito ativado", "A notificação aparece com a animação do estilo escolhido.", Keys.HU_ENABLED, Keys.D_HU_ENABLED);
+        toggle(hu, "Efeito ativado", "Anima a notificação no estilo escolhido.", Keys.HU_ENABLED, Keys.D_HU_ENABLED);
         styleChooser(hu);
         LinearLayout huButtons = row();
         huButtons.addView(button("Testar heads-up", true, new View.OnClickListener() {
@@ -1935,61 +2120,62 @@ public class SettingsActivity extends Activity {
             }
         }), weight());
         hu.addView(huButtons);
-        hu.addView(note("O teste usa os ajustes acima. Precisa de \"Notificações flutuantes\" ligado para este app."));
+        hu.addView(note("Precisa de \"Notificações flutuantes\" ligado para este app."));
 
         // O que a heads-up mostra
         LinearLayout hc = section(page, "Conteúdo da heads-up");
-        toggle(hc, "Sem botões", "Recolhida, mostra só título e texto. Os botões aparecem ao expandir. Ligações e alarmes mantêm os botões. No HyperOS 4, a seta de expandir e a barrinha de janela flutuante ficam invisíveis, mas continuam funcionando.", Keys.HU_NO_ACTIONS, Keys.D_HU_NO_ACTIONS);
-        toggle(hc, "Uma por notificação", "Mostra só a notificação nova, sem juntar com as anteriores do app.", Keys.HU_SEPARATE, Keys.D_HU_SEPARATE);
+        toggle(hc, "Sem botões", "Recolhida, mostra só título e texto.", Keys.HU_NO_ACTIONS, Keys.D_HU_NO_ACTIONS);
+        toggle(hc, "Uma por notificação", "Mostra só a notificação nova, sem as anteriores.", Keys.HU_SEPARATE, Keys.D_HU_SEPARATE);
 
     }
 
     private void buildConversas(LinearLayout page) {
         LinearLayout tx = section(page, "Texto");
-        toggle(tx, "Mensagem inteira ao segurar", "Ao segurar uma notificação, o cartão mostra a mensagem completa, com rolagem.", Keys.MODAL_FULL, Keys.D_MODAL_FULL);
-        toggle(tx, "Mais linhas de texto", "Os cartões da central mostram mais linhas da mensagem. Num grupo em pilha ficam com 3; ao abrir a pilha voltam ao escolhido. A heads-up continua igual.", Keys.LINES4, Keys.D_LINES4);
+        toggle(tx, "Mensagem inteira ao segurar", "Segure a notificação para ler a mensagem completa.", Keys.MODAL_FULL, Keys.D_MODAL_FULL);
+        toggle(tx, "Mais linhas de texto", "Os cartões da central mostram mais linhas.", Keys.LINES4, Keys.D_LINES4);
         slider(tx, "Linhas de texto", "Quantas linhas os cartões da central mostram.", Keys.LINES_N, Keys.D_LINES_N, 2, 10, "");
         LinearLayout cc = section(page, "Notificações de conversa");
-        toggle(cc, "Hora das conversas no canto", "A hora vai para o canto direito, como nos outros cartões. Até 1 hora mostra \"agora\" ou \"5 min\".", Keys.CONV_TIME, Keys.D_CONV_TIME);
-        toggle(cc, "Conversas sem a seta", "Esconde o botão de expandir. Puxe a notificação para expandir.", Keys.CONV_NO_EXPAND, Keys.D_CONV_NO_EXPAND);
-        toggle(cc, "Conversas no visual do HyperOS (teste)", "Monta as conversas como os outros cartões do HyperOS: foto, nome, última mensagem e hora no canto.", Keys.CONV_MIUI, Keys.D_CONV_MIUI);
-        toggle(cc, "Cada mensagem num cartão novo (teste)", "Como no iOS: cada mensagem nova vira um cartão. Ao abrir a conversa, todos somem. Precisa de \"Framework do sistema\" no escopo do LSPosed.", Keys.CONV_SPLIT, Keys.D_CONV_SPLIT);
-        toggle(cc, "Grupos só com o nome de quem mandou (teste)", "Em grupos, o título mostra só quem mandou, sem o nome do grupo. Precisa de \"Framework do sistema\" no escopo.", Keys.CONV_SENDER, Keys.D_CONV_SENDER);
+        toggle(cc, "Hora das conversas no canto", "A hora vai para o canto direito.", Keys.CONV_TIME, Keys.D_CONV_TIME);
+        toggle(cc, "Conversas sem a seta", "Esconde o botão de expandir; puxe para abrir.", Keys.CONV_NO_EXPAND, Keys.D_CONV_NO_EXPAND);
+        toggle(cc, "Conversas no visual do HyperOS (teste)", "Conversas no mesmo visual dos outros cartões.", Keys.CONV_MIUI, Keys.D_CONV_MIUI);
+        toggle(cc, "Cada mensagem num cartão novo (teste)", "Cada mensagem vira um cartão (precisa do Framework do sistema no escopo).", Keys.CONV_SPLIT, Keys.D_CONV_SPLIT);
+        toggle(cc, "Grupos só com o nome de quem mandou (teste)", "O título mostra só quem mandou (precisa do Framework do sistema no escopo).", Keys.CONV_SENDER, Keys.D_CONV_SENDER);
         cc.addView(note("Valem para as notificações novas ou atualizadas."));
         LinearLayout vi = section(page, "Visual dos cartões");
-        toggle(vi, "Texto das notificações com vibrance", "O conteúdo das notificações (menos o título) ganha o efeito vibrancy, como os tempos do player.", Keys.BODY_VIB, false);
-        slider(vi, "Intensidade do texto", "Quanto o texto clareia (escuro) ou escurece (claro) o vidro do cartão.", Keys.BODY_VIB_N, 70, 0, 100, "%");
-        toggle(vi, "Hora das notificações como no iOS (teste)", "A hora das notificações ganha o mesmo efeito vibrancy, com a intensidade dos números do player.", Keys.NOTIF_VIB, Keys.D_NOTIF_VIB);
+        toggle(vi, "Texto das notificações com vibrance", "O texto ganha o efeito vibrancy.", Keys.BODY_VIB, false);
+        slider(vi, "Intensidade do texto", "Força do efeito.", Keys.BODY_VIB_N, 70, 0, 100, "%");
+        toggle(vi, "Hora das notificações como no iOS (teste)", "A hora ganha o efeito vibrancy.", Keys.NOTIF_VIB, Keys.D_NOTIF_VIB);
 
     }
 
     private void buildGaveta(LinearLayout page) {
         LinearLayout st = section(page, "Empilhamento na gaveta");
         toggle(st, "Empilhar notificações", "As que passam do limite encolhem embaixo, como no HyperOS 4.", Keys.ST_ENABLED, Keys.D_ST_ENABLED);
-        slider(st, "Limite acima do fim da tela", "Maior começa a pilha mais alto.", Keys.ST_OFFSET, Keys.D_ST_OFFSET, 0, 400, " dp");
+        slider(st, "Limite acima do fim da tela", "Deixe espaço para o cadeado e os atalhos de baixo.", Keys.ST_OFFSET, Keys.D_ST_OFFSET, 0, 400, " dp");
         toggle(st, "Grupos expandidos por cartão", "Cada notificação de um grupo aberto empilha separada.", Keys.ST_GROUPS, Keys.D_ST_GROUPS);
-        toggle(st, "Player ao lado em paisagem", "Na gaveta em paisagem, com música e notificações, o player fica numa coluna à esquerda e as notificações à direita.", Keys.LAND_SPLIT, Keys.D_LAND_SPLIT);
-        toggle(st, "Grupos em pilha (teste)", "Notificações do mesmo app viram uma pilha de cartões. Toque para abrir; a seta empilha de novo. Apps sem grupo próprio (Instagram, Telegram) também empilham com \"Framework do sistema\" no escopo.", Keys.GROUP_STACK, Keys.D_GROUP_STACK);
+        toggle(st, "Player ao lado em paisagem", "Em paisagem, o player fica à esquerda e as notificações à direita.", Keys.LAND_SPLIT, Keys.D_LAND_SPLIT);
+        toggle(st, "Grupos em pilha (teste)", "Notificações do mesmo app viram uma pilha.", Keys.GROUP_STACK, Keys.D_GROUP_STACK);
         slider(st, "Pilha: velocidade", "Mais alto é mais rápido.", Keys.GS_SPEED, Keys.D_GS_SPEED, 50, 200, "%");
-        slider(st, "Pilha: bounce", "0% sem pulo; 300% pula bem mais.", Keys.GS_BOUNCE, Keys.D_GS_BOUNCE, 0, 300, "%");
+        slider(st, "Pilha: bounce", "Quanto a pilha pula.", Keys.GS_BOUNCE, Keys.D_GS_BOUNCE, 0, 300, "%");
         slider(st, "Pilha: profundidade", "Quanto os cartões de trás aparecem.", Keys.GS_DEPTH, Keys.D_GS_DEPTH, 4, 30, " dp");
-        slider(st, "Pilha: sombra entre os cartões", "Sombra suave entre os cartões. 0% tira.", Keys.GS_SHADOW, Keys.D_GS_SHADOW, 0, 100, "%");
+        slider(st, "Pilha: sombra entre os cartões", "Sombra entre os cartões.", Keys.GS_SHADOW, Keys.D_GS_SHADOW, 0, 100, "%");
 
     }
 
     private void buildBloqueio(LinearLayout page) {
         LinearLayout kg = section(page, "Tela de bloqueio");
-        toggle(kg, "Bloqueio com o HyperMusicCover", "Relógio, capa, player e ilha do bloqueio usam o HyperMusicCover (precisa da extensão, veja Extensões).", Keys.KG_HMC, Keys.D_KG_HMC);
+        toggle(kg, "Bloqueio com o HyperMusicCover", "O bloqueio usa o relógio, a capa e o player do HyperMusicCover.", Keys.KG_HMC, Keys.D_KG_HMC);
         toggle(kg, "Manter notificações após desbloquear", "As notificações vistas continuam no bloqueio até serem apagadas.", Keys.KG_KEEP, Keys.D_KG_KEEP);
         toggle(kg, "Empilhar no bloqueio", "Mostra todas as notificações e empilha as que passam do limite.", Keys.KG_ENABLED, Keys.D_KG_ENABLED);
         toggle(kg, "Rolar sem desbloquear", "Deslizar sobre as notificações rola a lista; fora delas, desbloqueia.", Keys.KG_SCROLL, Keys.D_KG_SCROLL);
         toggle(kg, "Relógio na posição inicial", "Com notificações, o relógio fica grande e no mesmo lugar.", Keys.KG_CLOCK_FIXED, Keys.D_KG_CLOCK_FIXED);
         toggle(kg, "Relógio acompanha a rolagem", "Ao rolar, as notificações empurram o relógio para cima.", Keys.KG_CLOCK, Keys.D_KG_CLOCK);
         toggle(kg, "Desfoque no topo", "As notificações se desfocam ao passar sob a barra de status.", Keys.KG_BLUR, Keys.D_KG_BLUR);
+        toggle(kg, "Abrir a ilha como no HyperOS 4 (teste)", "A lista nasce pequena e desfocada junto da ilha e cresce até o lugar; ao fechar, encolhe de volta para ela.", Keys.KG_ISLAND_ANIM, Keys.D_KG_ISLAND_ANIM);
         toggle(kg, "Lista baixa (estilo iOS)", "A lista começa mais embaixo, perto do polegar.", Keys.KG_IOS, Keys.D_KG_IOS);
         slider(kg, "Início da lista", "Onde o primeiro cartão começa com muitas notificações.", Keys.KG_START, Keys.D_KG_START, 25, 90, "%");
         slider(kg, "Limite acima do fim da tela", "Deixe espaço para o cadeado e os atalhos de baixo.", Keys.KG_OFFSET, Keys.D_KG_OFFSET, 40, 500, " dp");
-        toggle(kg, "Puxar para empilhar (teste)", "Com a lista no topo, continue rolando: as notificações se empilham até sobrar o player. Precisa de \"Empilhar no bloqueio\" e \"Rolar sem desbloquear\".", Keys.KG_HIDE, Keys.D_KG_HIDE);
+        toggle(kg, "Puxar para empilhar (teste)", "Role além do topo para empilhar as notificações.", Keys.KG_HIDE, Keys.D_KG_HIDE);
         kg.addView(note("Vale na próxima vez que a tela bloquear."));
         LinearLayout lw = section(page, "Widgets do bloqueio");
         toggle(lw, "Widgets no bloqueio", "Uma fileira de widgets no estilo iOS acima da lanterna e da câmera.", Keys.LOCK_WIDGETS, Keys.D_LOCK_WIDGETS);
@@ -2013,10 +2199,10 @@ public class SettingsActivity extends Activity {
 
     private void buildBarra(LinearLayout page) {
         LinearLayout sys = section(page, "Pílulas do relógio");
-        toggle(sys, "Relógio vermelho ao gravar a tela", "Durante a gravação de tela, o relógio da barra de status ganha uma pílula vermelha, como no iOS.", Keys.REC_PILL, Keys.D_REC_PILL);
-        toggle(sys, "Relógio azul com a localização em uso", "Quando algum app está usando a localização, o relógio ganha uma pílula azul.", Keys.LOC_PILL, Keys.D_LOC_PILL);
-        toggle(sys, "Relógio verde com o roteador ligado", "Com o roteador Wi-Fi (hotspot) ligado, o relógio ganha uma pílula verde.", Keys.HOT_PILL, Keys.D_HOT_PILL);
-        toggle(sys, "Vibrance na pílula do relógio", "Com uma pílula atrás, a hora vira um recorte e deixa ver o que está passando na tela, como o efeito vibrancy do iOS.", Keys.PILL_VIB, false);
+        toggle(sys, "Relógio vermelho ao gravar a tela", "Pílula vermelha no relógio durante a gravação.", Keys.REC_PILL, Keys.D_REC_PILL);
+        toggle(sys, "Relógio azul com a localização em uso", "Pílula azul no relógio com a localização em uso.", Keys.LOC_PILL, Keys.D_LOC_PILL);
+        toggle(sys, "Relógio verde com o roteador ligado", "Pílula verde no relógio com o roteador ligado.", Keys.HOT_PILL, Keys.D_HOT_PILL);
+        toggle(sys, "Vibrance na pílula do relógio", "A hora vira um recorte na pílula.", Keys.PILL_VIB, false);
         LinearLayout co = section(page, "Cores das pílulas");
         colorRow(co, "Cor da gravação", Keys.REC_COLOR, 0xFFFF3B30);
         colorRow(co, "Cor da localização", Keys.LOC_COLOR, 0xFF0A84FF);
@@ -2025,25 +2211,25 @@ public class SettingsActivity extends Activity {
 
     private void buildCentral(LinearLayout page) {
         LinearLayout ios = section(page, "Cortina");
-        toggle(ios, "Central em cortina (teste)", "A central desce do topo como uma cortina, com o fundo do bloqueio, relógio grande, lanterna e câmera. Desligado = central do HyperOS.", Keys.SHADE_SHEET, false);
-        toggle(ios, "Esconder a ilha ao puxar a central (teste)", "Com a ilha de música ativa, a puxada da central pode engasgar. Enquanto a central está aberta, a ilha fica escondida e volta quando ela fecha.", Keys.ISLAND_HIDE, Keys.D_ISLAND_HIDE);
-        toggle(ios, "Player rola com a lista", "Na cortina, o player deixa de ficar fixo abaixo do relógio e rola junto com as notificações. Use se outro módulo (como o HyperTweak) também mexer no player.", Keys.SHEET_PLAYER_FREE, Keys.D_SHEET_PLAYER_FREE);
-        toggle(ios, "Cantos arredondados na cortina", "Arredonda a borda de baixo da cortina enquanto ela se move.", Keys.SHEET_ROUND, true);
-        toggle(ios, "Fundo desfocado", "Usa o desfoque do HyperOS (a tela de trás desfocada). Desligado = papel de parede do bloqueio.", Keys.SHEET_BLUR, true);
+        toggle(ios, "Central em cortina (teste)", "A central desce do topo como uma cortina.", Keys.SHADE_SHEET, false);
+        toggle(ios, "Esconder a ilha ao puxar a central (teste)", "Esconde a ilha de música enquanto a central está aberta.", Keys.ISLAND_HIDE, Keys.D_ISLAND_HIDE);
+        toggle(ios, "Player rola com a lista", "O player rola junto com as notificações.", Keys.SHEET_PLAYER_FREE, Keys.D_SHEET_PLAYER_FREE);
+        toggle(ios, "Cantos arredondados na cortina", "Arredonda a borda de baixo da cortina.", Keys.SHEET_ROUND, true);
+        toggle(ios, "Fundo desfocado", "Desfoca a tela de trás; desligado usa o papel de parede.", Keys.SHEET_BLUR, true);
         LinearLayout ck = section(page, "Relógio da cortina");
-        toggle(ck, "Relógio do bloqueio na cortina (teste)", "Usa o mesmo modelo de relógio da tela de bloqueio (troca junto quando você muda o modelo). Alguns modelos sobem e encolhem ao rolar as notificações.", Keys.SHEET_LOCKCLOCK, false);
-        slider(ck, "Posição do relógio", "Quanto o relógio próprio da cortina (e a lista) descem a partir do topo. Não vale com o relógio do bloqueio.", Keys.SHEET_CLOCK, 60, 0, 240, " dp");
+        toggle(ck, "Relógio do bloqueio na cortina (teste)", "Usa o mesmo relógio da tela de bloqueio.", Keys.SHEET_LOCKCLOCK, false);
+        slider(ck, "Posição do relógio", "Quanto o relógio e a lista descem.", Keys.SHEET_CLOCK, 60, 0, 240, " dp");
     }
 
     private void buildSistema(LinearLayout page) {
         LinearLayout ig = section(page, "Instagram");
-        toggle(ig, "Barra de abas de vidro no Instagram (teste)", "A barra de baixo do Instagram vira uma pílula de vidro flutuante, com o feed passando por trás. Precisa do Instagram marcado no escopo do LSPosed.", Keys.IG_GLASS, Keys.D_IG_GLASS);
+        toggle(ig, "Barra de abas de vidro no Instagram (teste)", "A barra de baixo vira uma pílula de vidro (marque o Instagram no escopo).", Keys.IG_GLASS, Keys.D_IG_GLASS);
         choiceP(ig, "Estilo do vidro", new String[]{"Líquido", "Fosco"}, Keys.IG_GLASS_STYLE, Keys.D_IG_GLASS_STYLE, false);
         LinearLayout kb = section(page, "Teclado");
-        toggle(kb, "Gboard desfocado (teste)", "O fundo do Gboard fica transparente com o desfoque do sistema atrás. Precisa do Gboard marcado no escopo do LSPosed e de reabrir o teclado.", Keys.KB_BLUR, Keys.D_KB_BLUR);
-        slider(kb, "Intensidade do desfoque", "Quanto o fundo atrás do teclado fica borrado.", Keys.KB_BLUR_R, Keys.D_KB_BLUR_R, 0, 150, "");
-        slider(kb, "Cor do fundo", "Quanto da cor original do teclado fica por cima do desfoque. Mais alto deixa as teclas mais legíveis.", Keys.KB_BLUR_A, Keys.D_KB_BLUR_A, 0, 100, "%");
-        slider(kb, "Vidro das teclas", "Força do vidro claro nas teclas. Mais baixo deixa as teclas mais transparentes; 100% mantém as cores do tema do Gboard.", Keys.KB_KEYS_A, Keys.D_KB_KEYS_A, 10, 100, "%");
+        toggle(kb, "Gboard desfocado (teste)", "O fundo do Gboard fica de vidro (marque o Gboard no escopo).", Keys.KB_BLUR, Keys.D_KB_BLUR);
+        slider(kb, "Intensidade do desfoque", "Quanto o fundo fica borrado.", Keys.KB_BLUR_R, Keys.D_KB_BLUR_R, 0, 150, "");
+        slider(kb, "Cor do fundo", "Quanto da cor do teclado fica por cima.", Keys.KB_BLUR_A, Keys.D_KB_BLUR_A, 0, 100, "%");
+        slider(kb, "Vidro das teclas", "Mais baixo deixa as teclas mais transparentes.", Keys.KB_KEYS_A, Keys.D_KB_KEYS_A, 10, 100, "%");
         LinearLayout kbButtons = row();
         kbButtons.addView(button("Reiniciar o Gboard", false, new View.OnClickListener() {
             public void onClick(View v) {
@@ -2053,6 +2239,9 @@ public class SettingsActivity extends Activity {
         }), weight());
         kb.addView(kbButtons);
         LinearLayout sys = section(page, "Sistema");
+        toggle(sys, "Tratar como topo de linha (teste)", "Liga os efeitos que o HyperOS corta em aparelhos de entrada, como o vidro nos atalhos do bloqueio e na ilha. Pode pesar. Reinicie a Interface do Sistema.", Keys.HIGH_END, Keys.D_HIGH_END);
+        toggle(sys, "Segurar apps em segundo plano (teste)", "A limpeza preventiva da Xiaomi deixa de fechar os apps dos recentes enquanto houver memória de sobra. Depois de instalar, reinicie o celular uma vez.", Keys.MEM_KEEP, Keys.D_MEM_KEEP);
+        toggle(sys, "Recentes empilhados espelhados (teste)", "No estilo empilhado dos recentes da tela inicial, a pilha fica do outro lado e rola da direita para a esquerda. Depois de ligar ou desligar, abra os recentes de novo.", Keys.RECENTS_MIRROR, Keys.D_RECENTS_MIRROR);
         LinearLayout sysButtons = row();
         sysButtons.addView(button("Reiniciar Interface do Sistema", false, new View.OnClickListener() {
             public void onClick(View v) {
@@ -2066,74 +2255,164 @@ public class SettingsActivity extends Activity {
             }
         }), weight());
         sys.addView(sysButtons);
-        sys.addView(note("Reiniciar precisa de root. Toque no ↺ ao lado de um controle para voltar só ele ao valor original."));
+        sys.addView(note("Reiniciar precisa de root. O ↺ ao lado de um controle volta só ele ao padrão."));
     }
 
     // ------------------------------------------------------------------ aba Música
 
+    static final String[] MUSIC_SUBS = {"Player", "Capa do álbum", "Barra de progresso", "Efeito vibrancy", "Letras no bloqueio", "Saída de áudio"};
+    static final String[] MUSIC_SUBS_HELP = {
+            "Estilo, fundo, Canvas, selo E e título",
+            "Giro e brilho na troca de música",
+            "Cometa e cor da ponta",
+            "Barra, tempos, artista e botões como no iOS",
+            "Fundo escuro e letras estilo vídeo lírico",
+            "Apps no alto-falante com o Bluetooth conectado"};
+
+    /** Linha que abre uma categoria dentro da página atual. */
+    private void subEntry(LinearLayout card, String name, String help, final int k) {
+        LinearLayout r = new LinearLayout(this);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setPadding(dp(16), dp(14), dp(14), dp(14));
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.addView(text(name, 16.5f, cText, false));
+        TextView h = text(help, 13.5f, cSub, false);
+        h.setPadding(0, dp(2), dp(8), 0);
+        texts.addView(h);
+        r.addView(texts, new LinearLayout.LayoutParams(0, -2, 1f));
+        r.addView(text("›", 24, cSub, false));
+        TypedValue tv = new TypedValue();
+        if (getTheme().resolveAttribute(android.R.attr.selectableItemBackground, tv, true)) r.setBackgroundResource(tv.resourceId);
+        r.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                sub = k;
+                subFresh = true;
+                showPage(tab);
+            }
+        });
+        card.addView(r);
+    }
+
     private void buildMusic(LinearLayout page) {
+        if (sub < 0) {
+            LinearLayout c = section(page, "Música");
+            for (int i = 0; i < MUSIC_SUBS.length; i++) subEntry(c, MUSIC_SUBS[i], MUSIC_SUBS_HELP[i], i);
+            return;
+        }
+        if (sub == 0) {
         // Player: como o cartão de música fica
         LinearLayout pl = section(page, "Player");
-        toggle(pl, "Player estilo OriginOS", "Deixa o player de música da central como o do OriginOS: capa grande à esquerda com o ícone do app no canto, a barra de progresso ao lado da capa e os controles centralizados embaixo. Reinicie a Interface do Sistema para aplicar.", Keys.PLAYER_ORIGIN, Keys.D_PLAYER_ORIGIN);
-        toggle(pl, "Player da central no estilo ColorOS (teste)", "Na página de música e no detalhe do player da central (inclusive com o mod iOS26 Control Center): capa de ponta a ponta no topo que some num degradê, com título e artista no centro.", Keys.PLAYER_IOS, Keys.D_PLAYER_IOS);
-        toggle(pl, "Fundo igual às notificações", "O player usa o mesmo vidro das outras notificações, em vez do mais escuro.", Keys.MEDIA_PURE, Keys.D_MEDIA_PURE);
-        toggle(pl, "Selo E de conteúdo explícito", "Mostra o selo \"E\" (como no Spotify e no iOS) antes do título das músicas explícitas, no player do HyperOS e no player estilo ColorOS. Depende do app de música informar a marca de explícito.", Keys.EXPLICIT_E, Keys.D_EXPLICIT_E);
-        toggle(pl, "Título com as pontas desfocadas", "Nomes compridos rolam com as pontas desfocadas, em vez de cortadas.", Keys.MEDIA_EDGE, Keys.D_MEDIA_EDGE);
+        toggle(pl, "Player estilo OriginOS", "Capa grande à esquerda e controles embaixo, como no OriginOS.", Keys.PLAYER_ORIGIN, Keys.D_PLAYER_ORIGIN);
+        toggle(pl, "Player da central no estilo ColorOS (teste)", "Capa de ponta a ponta que some num degradê.", Keys.PLAYER_IOS, Keys.D_PLAYER_IOS);
+        toggle(pl, "Fundo igual às notificações", "O player usa o mesmo vidro das notificações.", Keys.MEDIA_PURE, Keys.D_MEDIA_PURE);
+        toggle(pl, "Canvas no fundo do player", "Com o HyperCanvas, o vidro do player mostra o vídeo do Canvas.", Keys.CANVAS_CARD, Keys.D_CANVAS_CARD);
+        toggle(pl, "Selo E de conteúdo explícito", "Selo \"E\" antes do título das músicas explícitas.", Keys.EXPLICIT_E, Keys.D_EXPLICIT_E);
+        toggle(pl, "Título com as pontas desfocadas", "Nomes longos rolam com as pontas desfocadas.", Keys.MEDIA_EDGE, Keys.D_MEDIA_EDGE);
 
+        } else if (sub == 1) {
         // Capa: o giro e o brilho ao trocar de música
-        LinearLayout cv = section(page, "Capa na troca de música");
-        toggle(cv, "Capa gira e brilha na troca", "Como no ColorOS 17: ao trocar a música, a capa gira e solta um brilho que se espalha pelo cartão.", Keys.ALBUM_GLOW, Keys.D_ALBUM_GLOW);
+        LinearLayout cv = section(page, "Capa do álbum");
+        toggle(cv, "Capa gira e brilha na troca", "Ao trocar de música, a capa gira e solta um brilho.", Keys.ALBUM_GLOW, Keys.D_ALBUM_GLOW);
         LinearLayout cvd = dep(cv, Keys.ALBUM_GLOW, Keys.D_ALBUM_GLOW);
-        toggle(cvd, "Brilho em onda de luz", "Como no ColorOS 17: uma onda de luz nasce na capa e se espalha pelo cartão, como uma gota na água. Desligado, a capa solta uma mancha desfocada. Posição e distância só valem para a mancha.", Keys.GLOW_SWEEP, Keys.D_GLOW_SWEEP);
-        slider(cvd, "Brilho: intensidade", "Quão forte o brilho aparece. Acima de 100% fica mais aceso que o padrão.", Keys.GLOW_POWER, Keys.D_GLOW_POWER, 10, 300, "%");
+        toggle(cvd, "Brilho em onda de luz", "O brilho se espalha como uma onda; desligado, é uma mancha.", Keys.GLOW_SWEEP, Keys.D_GLOW_SWEEP);
+        slider(cvd, "Brilho: intensidade", "Quão forte o brilho aparece.", Keys.GLOW_POWER, Keys.D_GLOW_POWER, 10, 300, "%");
         slider(cvd, "Brilho: tamanho", "Até onde ele se espalha em volta da capa.", Keys.GLOW_SIZE, Keys.D_GLOW_SIZE, 40, 200, "%");
         slider(cvd, "Brilho: distância", "Quanto ele desce pelo cartão enquanto some.", Keys.GLOW_DIST, Keys.D_GLOW_DIST, 0, 250, "%");
-        slider(cvd, "Brilho: posição lateral", "Para a esquerda (negativo) ou direita, em % da capa.", Keys.GLOW_X, Keys.D_GLOW_X, -150, 150, "%");
-        slider(cvd, "Brilho: posição vertical", "Para cima (negativo) ou para baixo, em % da capa.", Keys.GLOW_Y, Keys.D_GLOW_Y, -100, 150, "%");
+        slider(cvd, "Brilho: posição lateral", "Negativo vai para a esquerda.", Keys.GLOW_X, Keys.D_GLOW_X, -150, 150, "%");
+        slider(cvd, "Brilho: posição vertical", "Negativo vai para cima.", Keys.GLOW_Y, Keys.D_GLOW_Y, -100, 150, "%");
         slider(cvd, "Brilho: duração", "Mais alto é mais lento.", Keys.GLOW_TIME, Keys.D_GLOW_TIME, 50, 250, "%");
 
+        } else if (sub == 2) {
         // Barra de progresso, tempos e vibrance
         LinearLayout br = section(page, "Barra de progresso");
-        toggle(br, "Cometa na barra (teste)", "A barra do player fica fina e a parte tocada vai da cor da capa até uma ponta branca que brilha, como no iOS.", Keys.COMET_BAR, Keys.D_COMET_BAR);
+        toggle(br, "Cometa na barra (teste)", "A parte tocada vira um cometa que brilha na ponta.", Keys.COMET_BAR, Keys.D_COMET_BAR);
         LinearLayout cmd = dep(br, Keys.COMET_BAR, Keys.D_COMET_BAR);
-        slider(cmd, "Cometa: espessura da barra", "Grossura da barra com o cometa. 0 = igual à barra do sistema (sem mudar de tamanho ao pausar).", Keys.COMET_THICK, Keys.D_COMET_THICK, 0, 10, " dp");
-        slider(cmd, "Cometa: tamanho da cauda", "Comprimento máximo da cauda. Ela nasce curta e cresce com a música até esse tamanho, abrindo em V para trás.", Keys.COMET_TAIL, Keys.D_COMET_TAIL, 20, 200, " dp");
-        slider(cmd, "Cometa: começo apagado", "Quanto o começo da parte tocada fica mais transparente. 0 deixa sólido.", Keys.COMET_FADE, Keys.D_COMET_FADE, 0, 100, "%");
-        slider(cmd, "Cometa: brilho", "Quão forte a luz em volta da ponta aparece. 0 tira o brilho.", Keys.COMET_GLOW, Keys.D_COMET_GLOW, 0, 100, "%");
+        slider(cmd, "Cometa: espessura da barra", "0 = igual à barra do sistema.", Keys.COMET_THICK, Keys.D_COMET_THICK, 0, 10, " dp");
+        slider(cmd, "Cometa: tamanho da cauda", "Comprimento máximo da cauda.", Keys.COMET_TAIL, Keys.D_COMET_TAIL, 20, 200, " dp");
+        slider(cmd, "Cometa: começo apagado", "Quanto o começo fica transparente.", Keys.COMET_FADE, Keys.D_COMET_FADE, 0, 100, "%");
+        slider(cmd, "Cometa: brilho", "Luz em volta da ponta; 0 tira.", Keys.COMET_GLOW, Keys.D_COMET_GLOW, 0, 100, "%");
         slider(cmd, "Cometa: tamanho do brilho", "Até onde a luz da ponta se espalha.", Keys.COMET_SIZE, Keys.D_COMET_SIZE, 50, 250, "%");
-        slider(cmd, "Cometa: pulsar", "O brilho pulsa no ritmo de um segundo. 0 deixa fixo.", Keys.COMET_PULSE, Keys.D_COMET_PULSE, 0, 100, "%");
-        slider(cmd, "Cometa: faíscas", "Pontinhos que ficam para trás enquanto toca. 0 tira.", Keys.COMET_SPARKS, Keys.D_COMET_SPARKS, 0, 10, "");
-        toggle(cmd, "Começo na cor da capa", "O começo da parte tocada pega a cor mais viva da capa, clareada. Desligado, a barra toda usa a cor da ponta.", Keys.COMET_AUTO, Keys.D_COMET_AUTO);
+        slider(cmd, "Cometa: pulsar", "O brilho pulsa; 0 deixa fixo.", Keys.COMET_PULSE, Keys.D_COMET_PULSE, 0, 100, "%");
+        slider(cmd, "Cometa: faíscas", "Pontinhos que ficam para trás; 0 tira.", Keys.COMET_SPARKS, Keys.D_COMET_SPARKS, 0, 10, "");
+        toggle(cmd, "Começo na cor da capa", "O começo da barra pega a cor da capa.", Keys.COMET_AUTO, Keys.D_COMET_AUTO);
         colorRow(cmd, "Cor da ponta", Keys.COMET_COLOR, 0xFFFFFFFF);
-        toggle(br, "Barra e tempos como no iOS (teste)", "A barra e os tempos ganham o efeito vibrancy do iOS, no tom do vidro. Troca sozinho entre claro e escuro.", Keys.MEDIA_CUT, Keys.D_MEDIA_CUT);
+        } else if (sub == 3) {
+        LinearLayout br = section(page, "Efeito vibrancy");
+        toggle(br, "Barra e tempos como no iOS (teste)", "A barra e os tempos ganham o efeito vibrancy.", Keys.MEDIA_CUT, Keys.D_MEDIA_CUT);
         LinearLayout iod = dep(br, Keys.MEDIA_CUT, Keys.D_MEDIA_CUT);
-        slider(iod, "iOS: intensidade dos números", "Quanto os tempos clareiam (escuro) ou escurecem (claro) o vidro.", Keys.MV_TEXT, Keys.D_MV_TEXT, 0, 100, "%");
-        slider(iod, "iOS: intensidade do trilho", "A parte da barra que ainda falta tocar.", Keys.MV_TRACK, Keys.D_MV_TRACK, 0, 100, "%");
-        slider(iod, "iOS: intensidade da parte tocada", "A parte da barra que já tocou.", Keys.MV_PLAYED, Keys.D_MV_PLAYED, 0, 100, "%");
-        toggle(br, "Vibrance no artista e nos botões (teste)", "O nome do artista, os botões de voltar e pular e o selo E ganham o efeito vibrancy, como os tempos.", Keys.MEDIA_VIB_PLUS, Keys.D_MEDIA_VIB_PLUS);
+        slider(iod, "iOS: intensidade dos números", "Força do efeito nos tempos.", Keys.MV_TEXT, Keys.D_MV_TEXT, 0, 100, "%");
+        slider(iod, "iOS: intensidade do trilho", "A parte que falta tocar.", Keys.MV_TRACK, Keys.D_MV_TRACK, 0, 100, "%");
+        slider(iod, "iOS: intensidade da parte tocada", "A parte que já tocou.", Keys.MV_PLAYED, Keys.D_MV_PLAYED, 0, 100, "%");
+        toggle(br, "Vibrance no artista e nos botões (teste)", "Artista, botões e selo E ganham o efeito vibrancy.", Keys.MEDIA_VIB_PLUS, Keys.D_MEDIA_VIB_PLUS);
         LinearLayout vbd = dep(br, Keys.MEDIA_VIB_PLUS, Keys.D_MEDIA_VIB_PLUS);
-        slider(vbd, "Artista e botões: intensidade", "Quanto clareiam (escuro) ou escurecem (claro) o vidro.", Keys.MV_EXTRA, Keys.D_MV_EXTRA, 0, 100, "%");
+        slider(vbd, "Artista e botões: intensidade", "Força do efeito.", Keys.MV_EXTRA, Keys.D_MV_EXTRA, 0, 100, "%");
 
+        } else if (sub == 4) {
         // Letras na tela de bloqueio (HyperMusicCover)
         LinearLayout ly = section(page, "Letras na tela de bloqueio");
-        ly.addView(note("Valem para as letras do HyperMusicCover, quando elas estão abertas no bloqueio."));
-        toggle(ly, "Fundo escuro com as letras", "Escurece todo o fundo da tela de bloqueio enquanto as letras estão abertas, para o texto se destacar. O relógio, as notificações e o player continuam claros. Funciona com as letras do HyperMusicCover e com os estilos daqui.", Keys.LYRIC_DIM, Keys.D_LYRIC_DIM);
+        toggle(ly, "Fundo escuro com as letras", "Escurece o fundo enquanto as letras estão abertas.", Keys.LYRIC_DIM, Keys.D_LYRIC_DIM);
         LinearLayout dmd = dep(ly, Keys.LYRIC_DIM, Keys.D_LYRIC_DIM);
-        slider(dmd, "Fundo escuro: intensidade", "Quanto escurece. 100% fica quase preto.", Keys.LYRIC_DIM_PCT, Keys.D_LYRIC_DIM_PCT, 10, 100, "%");
-        toggle(ly, "Letras estilo vídeo lírico", "Muda o desenho das letras do HyperMusicCover na tela de bloqueio: uma frase por vez, centralizada, no estilo escolhido abaixo.", Keys.LYRIC_VIDEO, Keys.D_LYRIC_VIDEO);
+        slider(dmd, "Fundo escuro: intensidade", "100% fica quase preto.", Keys.LYRIC_DIM_PCT, Keys.D_LYRIC_DIM_PCT, 10, 100, "%");
+        toggle(ly, "Letras estilo vídeo lírico", "Uma frase por vez, centralizada, no estilo escolhido.", Keys.LYRIC_VIDEO, Keys.D_LYRIC_VIDEO);
         LinearLayout lvd = dep(ly, Keys.LYRIC_VIDEO, Keys.D_LYRIC_VIDEO);
-        choiceP(lvd, "Estilo das letras", new String[]{"Pincel", "Neon"}, Keys.LYRIC_STYLE, Keys.D_LYRIC_STYLE, false);
-        lvd.addView(note("Pincel: letra de pincel que aparece como tinta, se aproxima devagar e desce sumindo. Neon: as palavras acendem uma a uma, em fileiras curvadas como uma bolha, na cor da capa."));
-        toggle(lvd, "Chuva no vidro (Neon)", "No estilo Neon, gotas de chuva escorrem pelo vidro em volta das letras, onde o neon ilumina.", Keys.LYRIC_RAIN, Keys.D_LYRIC_RAIN);
+        choiceP(lvd, "Estilo das letras", new String[]{"Pincel", "Neon", "Cinético"}, Keys.LYRIC_STYLE, Keys.D_LYRIC_STYLE, false);
+        lvd.addView(note("Pincel aparece como tinta; Neon acende palavra por palavra na cor da capa."));
+        toggle(lvd, "Chuva no vidro (Neon)", "Gotas escorrem pelo vidro em volta do neon.", Keys.LYRIC_RAIN, Keys.D_LYRIC_RAIN);
         LinearLayout rnd = dep(lvd, Keys.LYRIC_RAIN, Keys.D_LYRIC_RAIN);
-        slider(rnd, "Chuva: quantidade", "Quantas gotas batem no vidro. Com mais chuva as gotas se juntam mais e escorrem mais.", Keys.LYRIC_RAIN_AMT, Keys.D_LYRIC_RAIN_AMT, 10, 300, "%");
-        slider(rnd, "Chuva: gotas escorrendo", "Com que facilidade as gotas pesadas descem. 0 deixa todas paradas.", Keys.LYRIC_RAIN_SLIDE, Keys.D_LYRIC_RAIN_SLIDE, 0, 200, "%");
-        toggle(lvd, "Também no StandBy", "Usa o mesmo estilo nas letras do StandBy (a extensão HyperImmersive do HyperMusicCover, com o celular deitado carregando). Marque o HyperImmersive no escopo do Hyper Eternity no LSPosed e feche o StandBy uma vez.", Keys.LYRIC_STANDBY, Keys.D_LYRIC_STANDBY);
+        slider(rnd, "Chuva: quantidade", "Quantas gotas batem no vidro.", Keys.LYRIC_RAIN_AMT, Keys.D_LYRIC_RAIN_AMT, 10, 300, "%");
+        slider(rnd, "Chuva: gotas escorrendo", "Com que facilidade as gotas descem; 0 deixa paradas.", Keys.LYRIC_RAIN_SLIDE, Keys.D_LYRIC_RAIN_SLIDE, 0, 200, "%");
+        toggle(lvd, "Também no StandBy", "Mesmo estilo no StandBy do HyperImmersive (marque-o no escopo).", Keys.LYRIC_STANDBY, Keys.D_LYRIC_STANDBY);
         LinearLayout fonts = new LinearLayout(this);
         fonts.setOrientation(LinearLayout.VERTICAL);
         page.addView(fonts, new LinearLayout.LayoutParams(-1, -2));
         depView(fonts, Keys.LYRIC_VIDEO, Keys.D_LYRIC_VIDEO);
         neonFonts(fonts);
+            } else buildAudioSplit(page);
+    }
+
+    private void buildAudioSplit(LinearLayout page) {
+        LinearLayout c = section(page, "Saída de áudio");
+        toggle(c, "Apps no alto-falante com Bluetooth (teste)", "Com fone ou caixa Bluetooth conectados, os apps escolhidos tocam no alto-falante do celular; os outros continuam no Bluetooth. Precisa do Sistema Android marcado no LSPosed.", Keys.AUDIO_SPLIT, Keys.D_AUDIO_SPLIT);
+        final LinearLayout list = section(page, "Apps que tocam no alto-falante");
+        depView(list, Keys.AUDIO_SPLIT, Keys.D_AUDIO_SPLIT);
+        final TextView wait = text("Carregando os apps…", 14, cSub, false);
+        wait.setPadding(dp(16), dp(14), dp(16), dp(14));
+        list.addView(wait);
+        new Thread(new Runnable() {
+            public void run() {
+                final java.util.ArrayList<Object[]> apps = new java.util.ArrayList<>();
+                try {
+                    PackageManager pm = getPackageManager();
+                    Intent i = new Intent(Intent.ACTION_MAIN);
+                    i.addCategory(Intent.CATEGORY_LAUNCHER);
+                    java.util.HashSet<String> seen = new java.util.HashSet<>();
+                    for (android.content.pm.ResolveInfo ri : pm.queryIntentActivities(i, 0)) {
+                        String pk = ri.activityInfo.packageName;
+                        if (!seen.add(pk)) continue;
+                        apps.add(new Object[]{pk, String.valueOf(ri.loadLabel(pm)), ri.loadIcon(pm)});
+                    }
+                    final java.util.LinkedHashSet<String> on = getLines(Keys.AUDIO_SPLIT_APPS);
+                    java.util.Collections.sort(apps, new java.util.Comparator<Object[]>() {
+                        public int compare(Object[] a, Object[] b) {
+                            boolean ia = on.contains(a[0]), ib = on.contains(b[0]);
+                            if (ia != ib) return ia ? -1 : 1;   // os escolhidos primeiro
+                            return ((String) a[1]).compareToIgnoreCase((String) b[1]);
+                        }
+                    });
+                } catch (Throwable ignored) {
+                }
+                handler.post(new Runnable() {
+                    public void run() {
+                        if (sub != 5 || tab != 6) return;
+                        list.removeView(wait);
+                        java.util.LinkedHashSet<String> on = getLines(Keys.AUDIO_SPLIT_APPS);
+                        for (Object[] a : apps) appRow(list, (String) a[0], (String) a[1], (android.graphics.drawable.Drawable) a[2], on.contains(a[0]), Keys.AUDIO_SPLIT_APPS, (String) a[0]);
+                    }
+                });
+            }
+        }).start();
     }
 
     // ------------------------------------------------------------------ opções que dependem de outra
@@ -2449,8 +2728,8 @@ public class SettingsActivity extends Activity {
         final int def = Keys.D_HU_STYLE;
         final String[] names = {"OriginOS", "iOS"};
         final String[] helps = {
-                "Nasce da ilha e cresce até o lugar dela, com a mola do OriginOS.",
-                "Surge como uma barrinha abaixo do relógio e cresce com a mola até virar o cartão. Ao sair, encolhe de volta para a barrinha."
+                "Nasce da ilha com a mola do OriginOS.",
+                "Nasce da barrinha abaixo do relógio e volta para ela."
         };
         divider(card);
         LinearLayout box = new LinearLayout(this);
@@ -2489,13 +2768,13 @@ public class SettingsActivity extends Activity {
         slider(panels[1], "Velocidade", "Vale para a entrada e para a saída.", Keys.HU_IOS_SPEED, Keys.D_HU_IOS_SPEED, 50, 200, "%");
         slider(panels[1], "Bounce", "Quanto o cartão passa do tamanho final ao crescer.", Keys.HU_IOS_BOUNCE, Keys.D_HU_IOS_BOUNCE, 0, 200, "%");
         // barrinha que fica depois que a heads-up recua: prévia ao vivo + ajustes
-        toggle(panels[1], "Barrinha de notificações", "Depois que a heads-up recua, fica uma barrinha abaixo do relógio avisando que há notificações. Some ao abrir a central.", Keys.BAR_ON, Keys.D_BAR_ON);
+        toggle(panels[1], "Barrinha de notificações", "Uma barrinha abaixo do relógio avisa que há notificações.", Keys.BAR_ON, Keys.D_BAR_ON);
         barPreview = new BarPreview(this);
         LinearLayout.LayoutParams bpl = new LinearLayout.LayoutParams(-1, dp(96));
         bpl.setMargins(dp(16), dp(10), dp(16), dp(4));
         panels[1].addView(barPreview, bpl);
-        slider(panels[1], "Barrinha (iOS): para o lado", "Move a barrinha para a esquerda ou para a direita, a partir do relógio.", Keys.BAR_DX, Keys.D_BAR_DX, -80, 80, " dp");
-        slider(panels[1], "Barrinha (iOS): altura na tela", "Sobe ou desce a barrinha, a partir do fim da barra de status.", Keys.BAR_DY, Keys.D_BAR_DY, -30, 60, " dp");
+        slider(panels[1], "Barrinha (iOS): para o lado", "Posição lateral.", Keys.BAR_DX, Keys.D_BAR_DX, -80, 80, " dp");
+        slider(panels[1], "Barrinha (iOS): altura na tela", "Posição vertical.", Keys.BAR_DY, Keys.D_BAR_DY, -30, 60, " dp");
         slider(panels[1], "Barrinha (iOS): largura", "Comprimento da barrinha.", Keys.BAR_W, Keys.D_BAR_W, 10, 90, " dp");
         slider(panels[1], "Barrinha (iOS): espessura", "Altura da barrinha.", Keys.BAR_H, Keys.D_BAR_H, 2, 14, " dp");
         slider(panels[1], "Barrinha (iOS): opacidade", "Quanto a barrinha aparece.", Keys.BAR_A, Keys.D_BAR_A, 10, 100, "%");
@@ -2792,5 +3071,44 @@ public class SettingsActivity extends Activity {
                 });
             }
         }).start();
+    }
+
+    /** Selo com contorno arredondado dentro de um texto ("Beta"). */
+    static final class BadgeSpan extends android.text.style.ReplacementSpan {
+        final int color, stroke, pad, size;
+
+        BadgeSpan(int color, int stroke, int pad, int size) {
+            this.color = color;
+            this.stroke = stroke;
+            this.pad = pad;
+            this.size = size;
+        }
+
+        android.graphics.Paint small(android.graphics.Paint p) {
+            android.graphics.Paint q = new android.graphics.Paint(p);
+            q.setTextSize(size);
+            q.setTypeface(Typeface.DEFAULT);
+            return q;
+        }
+
+        public int getSize(android.graphics.Paint p, CharSequence t, int s, int e, android.graphics.Paint.FontMetricsInt fm) {
+            return (int) Math.ceil(small(p).measureText(t, s, e) + 2 * pad + stroke * 2);
+        }
+
+        public void draw(android.graphics.Canvas c, CharSequence t, int s, int e, float x, int top, int y, int bottom, android.graphics.Paint p) {
+            android.graphics.Paint q = small(p);
+            android.graphics.Paint.FontMetrics m = q.getFontMetrics();
+            float th = m.descent - m.ascent, h = th + pad * 0.6f;
+            float mid = y + (p.getFontMetrics().ascent + p.getFontMetrics().descent) / 2f;
+            float w = q.measureText(t, s, e) + 2 * pad;
+            android.graphics.RectF r = new android.graphics.RectF(x + stroke, mid - h / 2f, x + stroke + w, mid + h / 2f);
+            android.graphics.Paint b = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            b.setStyle(android.graphics.Paint.Style.STROKE);
+            b.setStrokeWidth(stroke);
+            b.setColor(color);
+            c.drawRoundRect(r, h / 2f, h / 2f, b);
+            q.setColor(color);
+            c.drawText(t, s, e, x + stroke + pad, mid - (m.ascent + m.descent) / 2f, q);
+        }
     }
 }

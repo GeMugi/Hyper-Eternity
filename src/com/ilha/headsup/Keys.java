@@ -8,7 +8,9 @@ public final class Keys {
     public static final String FILE = "ajustes";
     /** Grupo das preferências remotas do LSPosed (o app escreve, a Interface do Sistema lê). */
     public static final String GROUP = "ilha";
-    public static final String VERSION = "7.9.62";
+    /** Versão de teste: liga os diagnósticos no log e os recursos ainda em experiência. Na estável é false. */
+    public static final boolean TEST = false;
+    public static final String VERSION = "7.9.63";
 
     public static final String HU_ENABLED = "hu_enabled";
     public static final String HU_STYLE = "hu_style";        // 0 = OriginOS (sai da ilha), 1 = iOS (sai do ícone do app)
@@ -25,6 +27,8 @@ public final class Keys {
     public static final boolean D_PLAYER_ORIGIN = false;
     public static final String LYRIC_VIDEO = "lyric_video";
     public static final boolean D_LYRIC_VIDEO = false;
+    public static final String CANVAS_CARD = "canvas_card";   // vídeo do HyperCanvas no fundo do player
+    public static final boolean D_CANVAS_CARD = false;
     public static final String LYRIC_STANDBY = "lyric_standby";   // também no StandBy do HyperImmersive
     public static final boolean D_LYRIC_STANDBY = false;
     public static final String LYRIC_STYLE = "lyric_style";
@@ -40,6 +44,15 @@ public final class Keys {
     public static final String PLAYER_IOS = "player_ios";
     public static final boolean D_PLAYER_IOS = false;
     public static final String ISLAND_HIDE = "island_hide";
+    public static final String HIGH_END = "high_end";      // tratar como topo de linha (aparelhos de entrada)
+    public static final boolean D_HIGH_END = false;
+    public static final String MEM_KEEP = "mem_keep";      // segurar apps em segundo plano (sistema)
+    public static final boolean D_MEM_KEEP = false;
+    public static final String AUDIO_SPLIT = "audio_split";        // apps escolhidos tocam no alto-falante com Bluetooth
+    public static final boolean D_AUDIO_SPLIT = false;
+    public static final String AUDIO_SPLIT_APPS = "audio_split_apps";   // pacotes, um por linha
+    public static final String RECENTS_MIRROR = "recents_mirror";   // recentes empilhados espelhados (tela inicial)
+    public static final boolean D_RECENTS_MIRROR = false;
     public static final boolean D_ISLAND_HIDE = false;
     public static final String KB_RESTART = "kb_restart";
     public static final String IG_GLASS = "ig_glass";
@@ -83,6 +96,7 @@ public final class Keys {
     public static final String KG_IOS = "kg_ios";            // lista baixa, estilo iOS
     public static final String KG_START = "kg_start";        // % da altura da tela onde a lista começa
     public static final String KG_CLOCK = "kg_clock";        // relógio acompanha a rolagem
+    public static final String KG_ISLAND_ANIM = "kg_island_anim"; // abrir/fechar a ilha como no HyperOS 4
     public static final String KG_CLOCK_FIXED = "kg_clock_fixed"; // relógio fica como sem notificações
     public static final String KG_BLUR = "kg_blur";          // desfoque quando passam do topo
     public static final String KG_HMC = "kg_hmc";            // o HyperMusicCover cuida do bloqueio
@@ -140,6 +154,7 @@ public final class Keys {
     public static final boolean D_KG_IOS = false;
     public static final int D_KG_START = 58;
     public static final boolean D_KG_CLOCK = false;
+    public static final boolean D_KG_ISLAND_ANIM = false;
     public static final boolean D_KG_CLOCK_FIXED = false;
     public static final boolean D_KG_BLUR = false;
     public static final boolean D_KG_HMC = false;

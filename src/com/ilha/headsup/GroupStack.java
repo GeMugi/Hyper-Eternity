@@ -112,6 +112,7 @@ final class GroupStack {
                             }
                         }
                         boolean changed = open ? fanned.add(key) : fanned.remove(key);
+                        toggledAt = android.os.SystemClock.uptimeMillis();
                         p.args[0] = summary;
                         p.args[1] = Boolean.TRUE;
                         if (changed && !open && Collapse.start(summary, key)) return;   // recolher animado
@@ -154,6 +155,45 @@ final class GroupStack {
             });
         } catch (Throwable t) {
             ElasticCard.log("grupos em pilha: toques da lista não monitorados " + t);
+        }
+        try {
+            // No bloqueio, abrir/fechar um grupo avisa o "presenter", que leva para a central
+            // (goToLockedShade). Quando o grupo foi tratado aqui (espalhar/empilhar), o aviso é ignorado.
+            Class pres = Class.forName("com.android.systemui.statusbar.phone.StatusBarNotificationPresenter", false, cl);
+            for (Method m : pres.getDeclaredMethods()) {
+                if (!m.getName().equals("onExpandClicked")) continue;
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    protected void beforeHookedMethod(MethodHookParam p) {
+                        if (on() && android.os.SystemClock.uptimeMillis() - toggledAt < 300L) {
+                            p.setResult(null);
+                            if (tapLogs++ < 20) XposedBridge.log("[HeadsUpIlha] grupos em pilha: abrir/fechar no bloqueio sem ir para a central");
+                        }
+                    }
+                });
+            }
+        } catch (Throwable t) {
+            ElasticCard.log("grupos em pilha: aviso de expansão não encontrado " + t);
+        }
+        try {
+            // diagnóstico: quem manda o bloqueio abrir a central (toque no botão de recolher grupo)
+            Class lst = Class.forName("com.android.systemui.statusbar.LockscreenShadeTransitionController", false, cl);
+            XposedBridge.hookMethod(lst.getDeclaredMethod("goToLockedShade", View.class, boolean.class), new XC_MethodHook() {
+                protected void beforeHookedMethod(MethodHookParam p) {
+                    if (!Keys.TEST || shadeLogs++ >= 8) return;
+                    StringBuilder b = new StringBuilder("bloqueio → central: view=" + (p.args[0] == null ? "null" : p.args[0].getClass().getSimpleName())
+                            + " (último abrir/fechar de grupo há " + (android.os.SystemClock.uptimeMillis() - toggledAt) + "ms) via");
+                    StackTraceElement[] st = new Throwable().getStackTrace();
+                    for (int i = 2, k = 0; i < st.length && k < 9; i++) {
+                        String c = st[i].getClassName();
+                        if (c.startsWith("java.") || c.contains("LSPHooker") || c.contains("xposed") || c.contains("lsposed")) continue;
+                        b.append(" < ").append(c.substring(c.lastIndexOf('.') + 1)).append('.').append(st[i].getMethodName());
+                        k++;
+                    }
+                    XposedBridge.log("[HeadsUpIlha] " + b);
+                }
+            });
+        } catch (Throwable t) {
+            ElasticCard.log("diagnóstico da central no bloqueio indisponível " + t);
         }
         try {
             Class clicker = Class.forName(P + "NotificationClicker", false, cl);
@@ -241,7 +281,9 @@ final class GroupStack {
                         if (!on()) return;
                         List vis = (List) Refl.get(p.args[0], "visibleChildren");
                         if (vis == null) return;
+                        long t0 = Perf.begin();
                         for (int i = 0; i < vis.size(); i++) layoutRow(vis.get(i));
+                        Perf.end(Perf.GROUPS, t0);
                     } catch (Throwable t) {
                         err(t);
                     }
@@ -584,6 +626,8 @@ final class GroupStack {
         }
     }
     static long lastTapAct;
+    static long toggledAt;
+    static int shadeLogs;   // último abrir/fechar de grupo tratado aqui
     static int sumLogs;
     static int firstLogs;
 

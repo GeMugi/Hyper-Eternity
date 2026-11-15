@@ -260,7 +260,12 @@ final class IosMediaPage {
                 if (ps.getState() == android.media.session.PlaybackState.STATE_PLAYING) {
                     long e = android.os.SystemClock.elapsedRealtime() - ps.getLastPositionUpdateTime();
                     if (e > 0) pos += (long) (e * ps.getPlaybackSpeed());
-                    v.postInvalidateOnAnimation();
+                    // redesenha quando a barra anda 1 pixel (numa música de 3 min, ~3 vezes por segundo),
+                    // não a cada quadro da tela: o movimento é o mesmo e a GPU descansa
+                    float px = rs.width() * Math.max(0.1f, ps.getPlaybackSpeed());
+                    long step = dur > 0 && px > 0 ? (long) (dur / px) : 0;
+                    if (step > 24) v.postInvalidateDelayed(Math.min(step, 500));
+                    else v.postInvalidateOnAnimation();
                 }
                 if (dur > 0) frac = Math.max(0f, Math.min(1f, pos / (float) dur));
             }

@@ -67,7 +67,9 @@ final class SheetDeco extends View {
         }
         boolean land = w > h;   // paisagem: relógio à esquerda, notificações à direita
         float off = land ? 0f : Prefs.sheetClock * d;   // posição do relógio (a lista desce junto)
-        float lc = land ? -1 : CurtainClock.place(this, top, bot, d);   // relógio do bloqueio (estático)
+        long pf0 = Perf.begin();
+        float lc = land ? -1 : CurtainClock.place(this, top, bot, d);
+        Perf.end(Perf.SHEET, pf0);   // relógio do bloqueio (estático)
         if (land) CurtainClock.remove();
         if (lc >= 0) off = lc;
         top += off;

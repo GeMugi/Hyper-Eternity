@@ -730,18 +730,26 @@ final class LockWidgets extends android.widget.FrameLayout {
     static final java.util.WeakHashMap<View, Long> styled = new java.util.WeakHashMap<>();
     static int styleLogs;
     static int[] blendCols;
+    static int blendNight = -1;
 
-    /** Cores do vidro dos cartões de notificação do bloqueio (cor, modo, cor, modo). */
+    /** Cores do vidro dos cartões de notificação do bloqueio (cor, modo, cor, modo), do modo claro/escuro atual. */
     static int[] blendCols(Context c) {
-        if (blendCols != null) return blendCols;
         android.content.res.Resources r = c.getResources();
+        int night = r.getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        if (night != blendNight) {
+            // trocou o modo: as cores guardadas são do modo antigo, e os botões já pintados precisam de novo
+            blendNight = night;
+            blendCols = null;
+            styled.clear();
+        }
+        if (blendCols != null) return blendCols;
         String pkg = "com.android.systemui";
         int c1 = r.getIdentifier("notification_element_blend_keyguard_color_1", "color", pkg);
         int c2 = r.getIdentifier("notification_element_blend_keyguard_color_2", "color", pkg);
         int m1 = r.getIdentifier("notification_element_blend_keyguard_mode_1", "integer", pkg);
         int m2 = r.getIdentifier("notification_element_blend_keyguard_mode_2", "integer", pkg);
         if (c1 == 0 || c2 == 0 || m1 == 0 || m2 == 0) return null;
-        return blendCols = new int[]{c.getColor(c1), r.getInteger(m1), c.getColor(c2), r.getInteger(m2)};
+        return blendCols = new int[]{r.getColor(c1, null), r.getInteger(m1), r.getColor(c2, null), r.getInteger(m2)};
     }
 
     static int viewBlurMode(View v) {

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="relogios_app_name">Eternity Relógios</string>
+    <string name="relogios_description">HyperOS 4 All in One clocks on the HyperOS 3 lock screen, plus a patcher for the system text library. Extension of Hyper Eternity.</string>
+</resources>

@@ -84,7 +84,7 @@ final class LyricVideo {
                     if (dv.getParent() == null) return;
                     boolean moving = stepDim(dv);
                     if (moving) dv.postOnAnimation(this);
-                    else dv.postDelayed(this, 150);
+                    else dv.postDelayed(this, Prefs.lyricDim && Power.interactive() ? 150 : 1000);
                 }
             });
             log("fundo escuro pronto");
@@ -125,6 +125,7 @@ final class LyricVideo {
                 XposedBridge.hookMethod(m, new XC_MethodHook() {
                     protected void afterHookedMethod(MethodHookParam p) {
                         if (!(p.args[0] instanceof View)) return;
+                        CanvasCard.seen((View) p.args[0]);
                         if (HmcFix.loader == null) HmcFix.seen((View) p.args[0]);
                         if (lyricCls == null) check((View) p.args[0]);
                     }
@@ -431,6 +432,9 @@ final class LyricVideo {
         long wake = Long.MAX_VALUE;
         if (Prefs.lyricStyle == 1) {
             Neon.frame(c, groups, t, d, w, (areaTop + areaBottom) / 2f);
+            wake = 0;
+        } else if (Prefs.lyricStyle == 2) {
+            Kinetic.frame(c, groups, t, d, w);
             wake = 0;
         } else if (g != null && t < g.exit + EXIT) {
             drawGroup(c, g, t, d, w);

@@ -56,8 +56,12 @@ final class IslandHide {
 
     static final Runnable TICK = new Runnable() {
         public void run() {
+            long next = hidden ? 40 : 60;
             try {
-                boolean want = Prefs.islandHide && ShadeSheet.expanded();
+                Prefs.refresh();
+                // desligado ou tela apagada: não precisa vigiar a central 16 vezes por segundo
+                if (!hidden && (!Prefs.islandHide || !Power.interactive())) next = 1000;
+                boolean want = Prefs.islandHide && next < 1000 && ShadeSheet.expanded();
                 if (want != hidden) {
                     hidden = want;
                     for (WeakReference<View> r : islands) {
@@ -68,7 +72,7 @@ final class IslandHide {
                 }
             } catch (Throwable ignored) {
             }
-            H.postDelayed(this, hidden ? 40 : 60);
+            H.postDelayed(this, hidden ? 40 : next);
         }
     };
 

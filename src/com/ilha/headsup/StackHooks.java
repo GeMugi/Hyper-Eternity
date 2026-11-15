@@ -53,6 +53,7 @@ final class StackHooks {
     static volatile boolean onKeyguard;
     static volatile boolean shadeOpen;   // gaveta aberta (heads-up que some vai para a lista)
     static volatile float listTop = Float.NaN, listEnd = Float.NaN;
+    static volatile float hostY;          // topo da lista na tela (px), para converter listTop/mediaTop
     // esconder as notificações do bloqueio deslizando para baixo (e mostrar deslizando para cima)
     static volatile boolean kgHidden;
     static volatile float hideP;
@@ -161,7 +162,9 @@ final class StackHooks {
 
             XposedBridge.hookMethod(ssa.getMethod("resetViewStates", amb, int.class), new XC_MethodHook() {
                 protected void afterHookedMethod(MethodHookParam p) {
+                    long t0 = Perf.begin();
                     apply(p.thisObject, p.args[0]);
+                    Perf.end(Perf.LIST, t0);
                 }
             });
             XposedBridge.hookMethod(mSetClipBottom, new XC_MethodHook() {
@@ -234,6 +237,7 @@ final class StackHooks {
 
     static volatile float pull, pullMax;
     static volatile boolean collapsed;   // terminou de recolher: só então o player desce
+    static volatile float zenTop = Float.NaN;      // aviso do Não perturbe, em coordenadas da lista
     static volatile float mediaTop = Float.NaN, mediaBottom = Float.NaN;   // player, em coordenadas da lista
     static android.animation.ValueAnimator pullAnim;
     static boolean pulling, cancelling;
@@ -523,6 +527,10 @@ final class StackHooks {
     }
 
     static int revealLogs;
+    static long ghostSince, ghostPoked;
+    static boolean ghostLogged;
+    static long stuckPoked;
+    static final java.util.WeakHashMap stuck = new java.util.WeakHashMap();   // cartão -> {opacidade, desde}
 
     /**
      * No bloqueio, o HyperMusicCover esconde as notificações que viram ilha deixando o
@@ -540,6 +548,111 @@ final class StackHooks {
                 if (rowClass.isInstance(o)) n += reveal((View) o, 0);
             }
             if (n > 0 && revealLogs++ < 6) ElasticCard.log("gaveta: " + n + " notificação(ões) invisível(is) da ilha voltaram a aparecer");
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** Quantas notificações (a própria ou as de dentro do grupo) estão invisíveis pela ilha. */
+    static int ghosts(View v, int depth) {
+        int n = v.getTransitionAlpha() < 0.05f ? 1 : 0;
+        if (depth < 3 && v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                View c = g.getChildAt(i);
+                if (rowClass.isInstance(c)) n += ghosts(c, depth + 1);
+                else if (c instanceof ViewGroup && depth < 2) {
+                    ViewGroup cg = (ViewGroup) c;
+                    for (int j = 0; j < cg.getChildCount(); j++)
+                        if (rowClass.isInstance(cg.getChildAt(j))) n += ghosts(cg.getChildAt(j), depth + 1);
+                }
+            }
+        }
+        return n;
+    }
+
+    static long bgDiagAt;
+    static int bgDiags;
+
+    static String bgOf(Object row) {
+        try {
+            Object bg = Refl.get(row, "mBackgroundNormal");
+            java.lang.reflect.Field f = Refl.field(row.getClass(), "mShowNoBackground");
+            String s = f == null ? "?" : (f.getBoolean(row) ? "sem" : "com");
+            if (bg instanceof View) {
+                View b = (View) bg;
+                s += " vis=" + b.getVisibility() + " alfa=" + b.getAlpha() + " " + b.getWidth() + "x" + b.getHeight();
+                Object tint = Refl.get(b, "mTintColor");
+                if (tint != null) s += " tinta=" + Integer.toHexString(((Number) tint).intValue());
+                Object dr = Refl.get(b, "mBackground");
+                if (dr != null) s += " " + dr.getClass().getSimpleName();
+            }
+            return s;
+        } catch (Throwable t) {
+            return "erro " + t;
+        }
+    }
+
+    /** Diagnóstico (cortina/central): fundo de cada cartão, para achar por que uns ficam mais escuros. */
+    static void bgDiag(View[] views, boolean[] rows, int n) {
+        try {
+            long now = android.os.SystemClock.uptimeMillis();
+            if (bgDiags >= 6 || now - bgDiagAt < 4000L) return;
+            int k = 0;
+            for (int i = 0; i < n; i++) if (rows[i] && views[i] != null && views[i].isShown()) k++;
+            if (k < 3) return;
+            bgDiagAt = now;
+            bgDiags++;
+            for (int i = 0; i < n; i++) {
+                View v = views[i];
+                if (!rows[i] || v == null || !v.isShown()) continue;
+                String key = GroupStack.key(Refl.call(v, "getEntry"));
+                int bar = key.indexOf('|');
+                String pkg = bar >= 0 && key.indexOf('|', bar + 1) > 0 ? key.substring(bar + 1, key.indexOf('|', bar + 1)) : key;
+                StringBuilder b = new StringBuilder("fundo dos cartões: " + pkg + " " + v.getWidth() + "x" + v.getHeight() + " alfa " + v.getAlpha() + "/" + v.getTransitionAlpha()
+                        + " grupo=" + fSummary.getBoolean(v) + " pilha=" + stackedGroup(v) + " fundo[" + bgOf(v) + "]");
+                Object cc = Refl.get(v, "mChildrenContainer");
+                if (fSummary.getBoolean(v) && cc instanceof ViewGroup) {
+                    ViewGroup g = (ViewGroup) cc;
+                    int c = 0;
+                    for (int j = 0; j < g.getChildCount() && c < 3; j++) {
+                        View ch = g.getChildAt(j);
+                        if (!rowClass.isInstance(ch)) continue;
+                        c++;
+                        b.append(" filho[").append(bgOf(ch)).append(" alfa ").append(ch.getAlpha()).append(" y=").append((int) ch.getTranslationY())
+                                .append(" corte=").append(ch.getClipBounds()).append(']');
+                    }
+                }
+                ElasticCard.log(b.toString());
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    static long groupDiagAt;
+    static int groupDiags;
+
+    /** Diagnóstico: estado dos cartões de dentro de um grupo no bloqueio (grupo que aparece vazio). */
+    static void groupDiag(View row) {
+        try {
+            if (groupDiags >= 40 || !fSummary.getBoolean(row)) return;
+            long now = android.os.SystemClock.uptimeMillis();
+            if (now - groupDiagAt < 1500L) return;
+            Object cc = Refl.get(row, "mChildrenContainer");
+            if (!(cc instanceof ViewGroup)) return;
+            ViewGroup g = (ViewGroup) cc;
+            StringBuilder b = new StringBuilder("grupo no bloqueio: " + row.getHeight() + "px alfa " + row.getAlpha() + "/" + row.getTransitionAlpha()
+                    + " em pilha=" + stackedGroup(row) + " aberto=" + fChildrenExpanded.getBoolean(row) + " recipiente vis=" + g.getVisibility() + " alfa " + g.getAlpha() + "/" + g.getTransitionAlpha() + " filhos:");
+            int k = 0;
+            for (int i = 0; i < g.getChildCount() && k < 4; i++) {
+                View c = g.getChildAt(i);
+                if (!rowClass.isInstance(c)) continue;
+                k++;
+                b.append(" [vis=").append(c.getVisibility()).append(" alfa ").append(c.getAlpha()).append('/').append(c.getTransitionAlpha())
+                        .append(" y=").append((int) c.getTranslationY()).append(" h=").append(c.getHeight()).append(']');
+            }
+            groupDiagAt = now;
+            groupDiags++;
+            ElasticCard.log(b.toString());
         } catch (Throwable ignored) {
         }
     }
@@ -707,6 +820,7 @@ final class StackHooks {
             boolean dozing = fDozeAmount.getFloat(amb) > 0f;
             boolean shade = !keyguard && fShadeExpanded.getBoolean(amb);
             onKeyguard = keyguard;
+            if (!keyguard || !Prefs.kgIslandAnim) IslandOpen.off();
             if (!keyguard && pull > 0f) {
                 // saiu do bloqueio: na próxima vez as notificações aparecem
                 if (pullAnim != null) pullAnim.cancel();
@@ -771,16 +885,77 @@ final class StackHooks {
             boolean[] skips = new boolean[n];
             float prevBottom = Float.NaN, firstTop = Float.NaN, lastBottom = Float.NaN;
             int last = -1;
+            // Lista aberta com uma notificação (ou grupo) ainda guardada na ilha do HyperMusicCover: ela
+            // fica invisível mas guardava o lugar, e aparecia um cartão vazio. Se isso dura um
+            // instante (não é só a animação de abrir), ela sai da conta até voltar a aparecer.
+            boolean dropGhosts = false;
+            float dropped = 0f;
+            if (keyguard) {
+                int shown = 0, ghost = 0, full = 0;
+                for (int i = 0; i < n; i++) {
+                    Object o = list.get(i);
+                    if (!rowClass.isInstance(o)) continue;
+                    float ta0 = ((View) o).getTransitionAlpha();
+                    if (ta0 < 0.05f) ghost++; else shown++;
+                    if (ta0 > 0.99f) full++;
+                }
+                long nowMs = android.os.SystemClock.uptimeMillis();
+                // A ilha anima a opacidade ao devolver a notificação; no HyperOS 3 essa animação às
+                // vezes para no meio (ex.: 32%) e o cartão/grupo fica translúcido e sem desfoque.
+                // Opacidade parcial parada por um instante, com a lista à mostra: completa.
+                if (shown > 0) {
+                    for (int i = 0; i < n; i++) {
+                        Object o = list.get(i);
+                        if (!rowClass.isInstance(o)) continue;
+                        View rv = (View) o;
+                        float ta = rv.getTransitionAlpha();
+                        if (ta < 0.05f || ta > 0.99f) { stuck.remove(rv); continue; }
+                        float[] st = (float[]) stuck.get(rv);
+                        if (st == null || Math.abs(st[0] - ta) > 0.001f) {
+                            if (st == null) stuck.put(rv, new float[]{ta, nowMs % 100000000L});
+                            else { st[0] = ta; st[1] = nowMs % 100000000L; }
+                            if (nowMs - stuckPoked > 300L) {   // uma conferência pendente por vez
+                                stuckPoked = nowMs;
+                                final View poke = rv;
+                                host.postDelayed(new Runnable() { public void run() { requestStackUpdate(poke); } }, 320L);
+                            }
+                        } else if ((nowMs % 100000000L) - st[1] > 280f) {
+                            rv.setTransitionAlpha(1f);
+                            stuck.remove(rv);
+                            if (revealLogs++ < 16) ElasticCard.log("bloqueio: notificação parada em " + Math.round(ta * 100) + "% de opacidade voltou a 100%");
+                        }
+                    }
+                }
+                if (Prefs.kgIslandAnim) IslandOpen.sync(host, shown, ghost, full);
+                if (ghost > 0 && shown > 0) {
+                    if (ghostSince == 0L) ghostSince = nowMs;
+                    dropGhosts = nowMs - ghostSince > 350L;
+                    if (!dropGhosts && nowMs - ghostPoked > 150L) {
+                        ghostPoked = nowMs;
+                        final View poke = (View) list.get(0);
+                        host.postDelayed(new Runnable() { public void run() { requestStackUpdate(poke); } }, 380L);
+                    }
+                    if (dropGhosts && !ghostLogged && revealLogs++ < 12) ElasticCard.log("bloqueio: " + ghost + " notificação(ões) guardada(s) na ilha saíram da lista aberta (sem cartão vazio)");
+                    ghostLogged = dropGhosts;
+                } else { ghostSince = 0L; ghostLogged = false; }
+            }
             for (int i = 0; i < n; i++) {
                 View v = (View) list.get(i);
                 Object vs = mGetViewState.invoke(v);
                 views[i] = v;
                 states[i] = vs;
                 if (vs == null) continue;
-                float y = fY.getFloat(vs);
+                float y = fY.getFloat(vs) - dropped;
                 float h = fHeight.getInt(vs);
                 if (fInShelf.getBoolean(vs) && !Float.isNaN(prevBottom)) y = prevBottom + pad;
                 boolean row = rowClass.isInstance(v);
+                if (dropGhosts && row && v.getTransitionAlpha() < 0.05f) {
+                    // guardada na ilha com a lista aberta: sem lugar na lista e sem fundo desenhado
+                    fHidden.setBoolean(vs, true);
+                    dropped += h + pad;
+                    ys[i] = y; hs[i] = h; rows[i] = true; skips[i] = true;
+                    continue;
+                }
                 // As que o HyperMusicCover guarda na ilha ficam só invisíveis (transitionAlpha 0) e
                 // continuam na conta: assim já estão no lugar da lista baixa/pilha quando ele as
                 // mostra, em vez de aparecerem no topo e pularem para baixo na passada seguinte.
@@ -793,6 +968,7 @@ final class StackHooks {
                 prevBottom = y + h;
             }
 
+            if (Keys.TEST && !keyguard) bgDiag(views, rows, n);
             for (int i = 0; i < n; i++) {
                 if (states[i] == null || skips[i] || !rows[i]) continue;
                 if (Float.isNaN(firstTop)) firstTop = ys[i];
@@ -801,6 +977,7 @@ final class StackHooks {
             }
 
             if (keyguard) {
+                if (Keys.TEST) for (int i = 0; i < n; i++) if (states[i] != null && rows[i] && !skips[i]) groupDiag(views[i]);
                 int cnt = 0;
                 for (int i = 0; i < n; i++) if (states[i] != null && rows[i] && !skips[i]) cnt++;
                 // chegou notificação nova (ou não sobrou nenhuma): as escondidas voltam
@@ -823,7 +1000,9 @@ final class StackHooks {
             if (keyguard) {
                 host.getLocationOnScreen(loc);
                 visTop = -loc[1];
+                hostY = loc[1];
                 fadeTop = visTop + statusBarHeight(host);
+
             }
 
             // puxar para baixo: as notificações descem e empilham no limite de baixo
@@ -837,11 +1016,28 @@ final class StackHooks {
             }
             // 2ª passada: aplica deslocamento e empilhamento
             ArrayList<View> touched = new ArrayList<View>();
+            zenTop = Float.NaN;
             for (int i = 0; i < n; i++) {
                 View v = views[i];
                 Object vs = states[i];
                 if (vs == null || skips[i]) continue;
-                float y = ys[i] + shift + (rows[i] ? pullNow : 0f);
+                // o aviso do Não perturbe (ZenModeView) não é uma notificação comum: anda junto com elas
+                boolean zen = !rows[i] && v.getClass().getName().endsWith(".ZenModeView");
+                float y = ys[i] + shift + (rows[i] || zen ? pullNow : 0f);
+                // sem notificações à mostra (recolhidas na ilha/pílula): o aviso desce para o fim da lista
+                if (zen && keyguard) {
+                    // o HOS3 esconde/corta o aviso quando a lista rola: aqui ele segue visível como os cartões
+                    // é tratado como a primeira notificação: recolhidas na ilha/pílula, ele some com elas
+                    boolean off = y + hs[i] <= visTop || Float.isNaN(firstTop);
+                    fHidden.setBoolean(vs, off);
+                    fClipTop.setInt(vs, 0);
+                    if (off) VS.inv(mSetAlpha, vs, 0f);
+                    else if (y < fadeTop) {
+                        float len = StackMath.clamp(hs[i] * 0.6f, 24f * d, 96f * d);
+                        VS.inv(mSetAlpha, vs, fAlpha.getFloat(vs) * StackMath.clamp((y - fadeTop + len) / len, 0f, 1f));
+                    }
+                }
+                if (zen && keyguard && v.getVisibility() == View.VISIBLE && !Float.isNaN(firstTop)) zenTop = y;
                 float h = hs[i];
                 if (!rows[i]) {
                     // o player da música já foi posto embaixo (placeMedia) no modo HyperMusicCover
@@ -916,7 +1112,7 @@ final class StackHooks {
             if (keyguard && Prefs.kgBlur)    // desfoque quando as notificações passam do topo
                 TopBlur.update(host, visTop, Float.isNaN(listTop) ? Float.NaN : listTop - visTop, scrollY, statusBarHeight(host), d);
             else TopBlur.off();
-            if (keyguard && Prefs.kgClock)   // relógio é empurrado quando a lista encosta nele
+            if (keyguard && Prefs.kgClock && Float.isNaN(Ext.clockFloor()))   // relógio é empurrado quando a lista encosta nele
                 ClockFollow.follow(Float.isNaN(listTop) ? Float.NaN : listTop - visTop, scrollY, host.getHeight(), d);
             listEnd = E;
             for (int i = 0; i < touched.size(); i++) {

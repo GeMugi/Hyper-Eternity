@@ -27,6 +27,7 @@ final class SafeMode {
     static final File FILE = new File("/data/user_de/0/com.android.systemui/files/heads-up-ilha-seguranca");
 
     static final HashSet off = new HashSet();
+    static final HashSet seen = new HashSet();
     static String last = "";
     static long lastAt;
     static String pending = "";
@@ -38,6 +39,12 @@ final class SafeMode {
             lastAt = parse(p.getProperty("lastAt", "0"));
             for (String k : p.getProperty("off", "").split(",")) if (k.length() > 0) off.add(k);
             pending = p.getProperty("pending", "");
+            // recursos desligados pela proteção (f:...) voltam a valer numa versão nova do módulo
+            if (!Keys.VERSION.equals(p.getProperty("ver", ""))) {
+                for (Object k : off.toArray()) if (String.valueOf(k).startsWith("f:")) off.remove(k);
+                p.setProperty("ver", Keys.VERSION);
+                p.setProperty("seen", "");
+            }
             long now = System.currentTimeMillis();
             ArrayList starts = new ArrayList();
             for (String s : p.getProperty("starts", "").split(",")) {
@@ -47,9 +54,10 @@ final class SafeMode {
             starts.add(Long.valueOf(now));
             if (starts.size() >= 3 && last.length() > 0 && now - lastAt < RECENT) {
                 off.add(last);
-                pending = last;
+                boolean feature = last.startsWith("f:");
+                if (!feature) pending = last;   // opções do app: o app desliga a chave também
                 ElasticCard.log("SEGURANÇA: a Interface do Sistema reiniciou " + (starts.size() - 1)
-                        + " vezes em poucos minutos; desliguei a última opção ligada (" + last + ")");
+                        + " vezes seguidas; desliguei a última alteração (" + (feature ? "recurso " + last.substring(2) + ", volta na próxima versão do módulo" : "opção " + last) + ")");
                 last = "";
                 starts.clear();
             }
@@ -75,12 +83,43 @@ final class SafeMode {
     static synchronized void noteLast(String key, long at) {
         if (key == null) key = "";
         if (key.equals(last) && at == lastAt) return;
+        if (at < lastAt) return;   // um recurso entrou em ação depois: ele é a última alteração
         last = key;
         lastAt = at;
         try {
             Properties p = load();
             p.setProperty("last", key);
             p.setProperty("lastAt", String.valueOf(at));
+            save(p);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** Recurso desligado pela proteção (o SystemUI caiu em sequência logo depois dele agir)? */
+    static boolean blocked(String feature) {
+        return off.contains("f:" + feature);
+    }
+
+    /**
+     * Um recurso que não tem chave no app (ex.: o vidro, que liga pelo editor do bloqueio) entrou em
+     * ação agora: passa a ser a "última alteração". Se o SystemUI cair 3 vezes seguidas logo depois,
+     * ele é desligado até a próxima versão do módulo.
+     */
+    static synchronized void touch(String feature) {
+        String key = "f:" + feature;
+        if (seen.contains(key)) return;
+        seen.add(key);
+        long now = System.currentTimeMillis();
+        try {
+            Properties p = load();
+            // só a primeira vez que o recurso age nesta versão do módulo conta como alteração
+            String sn = "," + p.getProperty("seen", "") + ",";
+            if (sn.contains("," + key + ",")) return;
+            p.setProperty("seen", p.getProperty("seen", "").length() == 0 ? key : p.getProperty("seen") + "," + key);
+            last = key;
+            lastAt = now;
+            p.setProperty("last", key);
+            p.setProperty("lastAt", String.valueOf(now));
             save(p);
         } catch (Throwable ignored) {
         }

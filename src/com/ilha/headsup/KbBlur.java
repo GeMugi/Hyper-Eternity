@@ -276,6 +276,7 @@ final class KbBlur {
     static final WeakHashMap<View, Boolean> miViews = new WeakHashMap<>();
     static boolean miBroken;
     static int[] blend;
+    static int blendNight = -1;
 
     /**
      * O mesmo vidro das notificações do HyperOS: desfoque do sistema (MiBlur) + a mistura de cores
@@ -283,6 +284,12 @@ final class KbBlur {
      */
     static boolean miGlass(View v) {
         if (miBroken) return false;
+        int night = v.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        if (night != blendNight) {   // trocou o modo claro/escuro: cores novas, e repinta quem já tinha
+            blendNight = night;
+            blend = null;
+            miViews.clear();
+        }
         if (miViews.containsKey(v)) return true;
         try {
             int os = 0;

@@ -93,9 +93,9 @@ final class OriginPlayer {
         int art = id(r, pk, "album_art"), seam = id(r, pk, "media_seamless"), title = id(r, pk, "header_title"),
                 artist = id(r, pk, "header_artist"), el = id(r, pk, "media_elapsed_time"), tot = id(r, pk, "media_total_time"),
                 bar = id(r, pk, "media_progress_bar");
-        artId = art; titleId = title; artistId = artist; elapsedId = el; barId = bar;
+        artId = art; titleId = title; artistId = artist; elapsedId = el; barId = bar; seamId = seam; totalId = tot;
         int[] act = {id(r, pk, "action0"), id(r, pk, "action1"), id(r, pk, "action2"), id(r, pk, "action3"), id(r, pk, "action4")};
-        int pad = Math.round(14 * dp), artSize = Math.round(70 * dp), timeW = Math.round(44 * dp), gap = Math.round(2 * dp);
+        int pad = Math.round(12 * dp), artSize = Math.round(66 * dp), timeW = Math.round(44 * dp), gap = Math.round(2 * dp);
         // cartão do tamanho do conteúdo (no HyperOS o fundo tem altura fixa de 185dp)
         s.size(id(r, pk, "media_bg"), 0, 0);
 
@@ -129,11 +129,11 @@ final class OriginPlayer {
         s.size(tot, timeW, -2);
 
         // controles embaixo, menores e espalhados
-        int ah = Math.round(42 * dp);
+        int ah = Math.round(36 * dp);
         for (int a : act) s.height(a, ah);
         s.clear(act[0], TOP);
-        s.connect(act[0], TOP, bar, BOTTOM, -Math.round(2 * dp));
-        s.connect(act[0], BOTTOM, PARENT, BOTTOM, Math.round(8 * dp));
+        s.connect(act[0], TOP, bar, BOTTOM, -Math.round(4 * dp));
+        s.connect(act[0], BOTTOM, PARENT, BOTTOM, Math.round(6 * dp));
         s.margin(act[0], LEFT, Math.round(36 * dp));
         s.margin(act[4], RIGHT, Math.round(36 * dp));
         s.chain(act[0], 0);
@@ -152,7 +152,9 @@ final class OriginPlayer {
         Object w = set.getClass().getConstructor().newInstance();
         w.getClass().getMethod("clone", set.getClass()).invoke(w, set);
         Cs x = new Cs(w);
-        int side = Math.round(48 * dp);   // espaço do ícone de saída de áudio dos dois lados
+        // espaço dos ícones dos dois lados (saída de áudio à direita, letras à esquerda) com folga
+        // para o texto que corre não encostar neles
+        int side = Math.round(60 * dp);
         x.clear(title);
         x.connect(title, LEFT, PARENT, LEFT, side);
         x.connect(title, RIGHT, PARENT, RIGHT, side);
@@ -209,7 +211,7 @@ final class OriginPlayer {
     static final int TAG_WIDE = 0x7f7f0102, TAG_MOVED = 0x7f7f0105;
     /** Posições do layout normal (relativas ao cartão): título, artista, tempo decorrido. */
     static int[] nTitle, nArtist, nEl;
-    static int elapsedId, barId;
+    static int elapsedId, barId, seamId, totalId;
 
     /**
      * Um quadro do player. p = quanto a capa já expandiu (0 = cartão normal, 1 = capa grande).
@@ -236,9 +238,10 @@ final class OriginPlayer {
             if (morphOn && morphTarget < 0.5f && !isWide) p = 0f;
             if (morphOn && morphTarget >= 0.5f && isWide && p < 0.001f) p = 0.001f;
             boolean wantWide = p > 0.001f;
-            if (!isWide && !player.isLayoutRequested() && t.getWidth() > 0) {
-                nTitle = new int[]{t.getLeft(), t.getTop()};
-                nArtist = new int[]{a.getLeft(), a.getTop()};
+            // posições do cartão recolhido como aparecem (com o espaço que o HMC abre para o ícone de letras)
+            if (!isWide && player.getTag(TAG_MOVED) == null && !player.isLayoutRequested() && t.getWidth() > 0) {
+                nTitle = new int[]{Math.round(t.getLeft() + t.getTranslationX()), Math.round(t.getTop() + t.getTranslationY())};
+                nArtist = new int[]{Math.round(a.getLeft() + a.getTranslationX()), Math.round(a.getTop() + a.getTranslationY())};
                 nEl = new int[]{el.getLeft(), el.getTop()};
             }
             if (wantWide != isWide) {
@@ -249,14 +252,28 @@ final class OriginPlayer {
                         + " escala=" + art.getScaleX() + " girar=" + art.getRotationY() + " tx=" + art.getTranslationX() + "/" + art.getTranslationY());
                 return false;   // refaz o layout antes de desenhar: nada aparece fora do lugar
             }
-            // o ícone de letras do HMC fica no cantinho da capa (centro do quadrado onde a capa fica)
+            // capa expandida: o ícone de letras do HMC vai para o cantinho, acima do tempo decorrido;
+            // recolhido, fica escondido atrás da capa (também no modo Canvas, em que o HMC o põe na
+            // fileira de botões, em cima do primeiro botão)
+            if (isWide) unhide();
             android.view.View icon = lyricIcon(player);
-            if (icon != null) placeIcon(icon, player, art);
+            if (icon != null) {
+                if (isWide) placeIcon(icon, player, art);
+                else hideBehind(icon, player, art);
+            } else if (isWide) {
+                // sem o ícone de letras (música sem letra, HMC sem a opção): a saída de áudio se alinha sozinha
+                alignSeam(art.getParent() instanceof android.view.View ? (android.view.View) art.getParent() : player);
+            }
             if (!isWide) {
                 if (player.getTag(TAG_MOVED) != null) {
                     player.setTag(TAG_MOVED, null);
-                    for (android.view.View v : new android.view.View[]{t, a, el}) { v.setTranslationX(0f); v.setTranslationY(0f); }
+                    back(t, nTitle);
+                    back(a, nArtist);
+                    el.setTranslationX(0f);
+                    el.setTranslationY(0f);
                 }
+                // recolhido também: a saída de áudio termina onde termina o tempo total
+                alignSeam(art.getParent() instanceof android.view.View ? (android.view.View) art.getParent() : player);
                 return true;
             }
             player.setTag(TAG_MOVED, Boolean.TRUE);
@@ -281,6 +298,21 @@ final class OriginPlayer {
 
     static int logW;
 
+    /** Volta o texto para onde estava no cartão recolhido. */
+    static void back(android.view.View v, int[] n) {
+        v.setTranslationX(n == null ? 0f : n[0] - v.getLeft());
+        v.setTranslationY(n == null ? 0f : n[1] - v.getTop());
+    }
+
+    /** O cartão (ou um dos pais dele) está no layout da capa expandida? */
+    static boolean wide(android.view.View v) {
+        for (int i = 0; v != null && i < 4; i++) {
+            if (Boolean.TRUE.equals(v.getTag(TAG_WIDE))) return true;
+            v = v.getParent() instanceof android.view.View ? (android.view.View) v.getParent() : null;
+        }
+        return false;
+    }
+
     static String loc(android.view.View v) {
         int[] l = new int[2];
         v.getLocationOnScreen(l);
@@ -296,6 +328,7 @@ final class OriginPlayer {
 
     static android.view.View lyricIcon(android.view.View player) {
         android.view.View v = iconRef == null ? null : iconRef.get();
+        if (v != null && Boolean.TRUE.equals(v.getTag(TAG_HID))) return null;   // escondido por nós: já sabemos onde está
         if (v == null || !ok(v, player) || !isLyricDesc(v)) {
             v = null;
             long now = android.os.SystemClock.uptimeMillis();
@@ -340,18 +373,70 @@ final class OriginPlayer {
     }
 
     /** Põe o ícone de letras no centro do lugar da capa (contas na tela: o HMC pode pôr o ícone fora do player). */
+    static final int TAG_HID = 0x7f7f0106;
+
+    /**
+     * Recolhido: o ícone de letras some (fica invisível, sem receber toque). Com Canvas, o HMC o
+     * põe na fileira de botões, em cima do primeiro botão. Só mexe na visibilidade: mudar a
+     * profundidade (Z) dele derrubava a Interface do Sistema ao bloquear com Canvas.
+     */
+    static void hideBehind(android.view.View icon, android.view.View player, android.view.View art) {
+        if (icon.getVisibility() != android.view.View.VISIBLE) return;
+        icon.setTag(TAG_HID, Boolean.TRUE);
+        icon.setVisibility(android.view.View.INVISIBLE);
+        if (logH++ < 3) plog("ícone de letras escondido (player recolhido)");
+    }
+
+    /** Capa expandida: o ícone que escondemos volta. */
+    static void unhide() {
+        android.view.View v = iconRef == null ? null : iconRef.get();
+        if (v != null && Boolean.TRUE.equals(v.getTag(TAG_HID))) {
+            v.setTag(TAG_HID, null);
+            if (v.getVisibility() == android.view.View.INVISIBLE) v.setVisibility(android.view.View.VISIBLE);
+        }
+    }
+
+    static int logH;
+
     static void placeIcon(android.view.View icon, android.view.View player, android.view.View art) {
         int[] pl = new int[2], il = new int[2];
         android.view.View host = art.getParent() instanceof android.view.View ? (android.view.View) art.getParent() : player;
         host.getLocationOnScreen(pl);
         icon.getLocationOnScreen(il);
         float baseX = il[0] - icon.getTranslationX(), baseY = il[1] - icon.getTranslationY();
-        // no canto, centralizado acima do tempo decorrido e na altura do bloco título + artista
+        // alinhados com os tempos: o ícone de saída de áudio termina onde termina o tempo total e o
+        // de letras começa onde começa o tempo decorrido, os dois na mesma altura (a do ícone de saída)
         float cx = pl[0] + art.getLeft() + art.getWidth() / 2f, cy = pl[1] + art.getTop() + art.getHeight() / 2f;
         android.view.View el = elapsedId == 0 ? null : host.findViewById(elapsedId);
+        android.view.View tot = totalId == 0 ? null : host.findViewById(totalId);
         android.view.View t = host.findViewById(titleId), ar = host.findViewById(artistId);
-        if (el != null && el.getWidth() > 0) cx = pl[0] + el.getLeft() + el.getTranslationX() + el.getWidth() / 2f;
-        if (t != null && ar != null && t.getHeight() > 0) cy = pl[1] + (t.getTop() + t.getTranslationY() + ar.getBottom() + ar.getTranslationY()) / 2f;
+        android.view.View seam = seamId == 0 ? null : host.findViewById(seamId);
+        android.graphics.RectF gi = glyph(icon);
+        if (seam != null && seam.isShown() && seam.getWidth() > 0) {
+            android.graphics.RectF gs = glyph(seam);
+            // desenho estranho (maior que a view): usa a própria view
+            if (gs.width() <= 0 || gs.left < -1 || gs.right > seam.getWidth() + 1) gs.set(0, 0, seam.getWidth(), seam.getHeight());
+            // ocupa a view inteira (o espectro que toca é desenhado no meio, com folga em volta):
+            // a parte desenhada é ~64% do centro, senão o ícone fica recuado em relação ao tempo
+            if (gs.left <= 0.5f && gs.right >= seam.getWidth() - 0.5f) {
+                // medido nos prints: o desenho ocupa de ~32% a ~96% da largura da view
+                gs.left = seam.getWidth() * 0.32f;
+                gs.right = seam.getWidth() * 0.957f;
+                if (logS < 3) plog("saída de áudio: " + seam.getClass().getName() + " sem desenho medido, usando o centro");
+            }
+            int[] sl = new int[2];
+            seam.getLocationOnScreen(sl);
+            float sBaseX = sl[0] - seam.getTranslationX(), sBaseY = sl[1] - seam.getTranslationY();
+            alignSeam(host);
+            cy = sBaseY + seam.getTranslationY() + gs.centerY();
+        } else if (t != null && ar != null && t.getHeight() > 0) {
+            cy = pl[1] + (t.getTop() + t.getTranslationY() + ar.getBottom() + ar.getTranslationY()) / 2f;
+        }
+        if (el instanceof android.widget.TextView && el.getWidth() > 0) {
+            // a borda esquerda do desenho do ícone na borda esquerda do texto do tempo
+            cx = pl[0] + textLeft((android.widget.TextView) el) - gi.left + icon.getWidth() / 2f;
+        }
+        cy += icon.getHeight() / 2f - gi.centerY();
         float tx = cx - icon.getWidth() / 2f - baseX;
         float ty = cy - icon.getHeight() / 2f - baseY;
         if (Math.abs(icon.getTranslationX() - tx) > 0.5f) icon.setTranslationX(tx);
@@ -359,7 +444,98 @@ final class OriginPlayer {
         if (logI++ < 3) plog("ícone de letras base=" + baseX + "," + baseY + " desloca=" + tx + "," + ty + " capa centro=" + cx + "," + cy);
     }
 
-    static int logI;
+    static int logI, logS;
+
+    /** Ícone de saída de áudio: a borda direita do desenho na borda direita do texto do tempo total. */
+    static void alignSeam(android.view.View host) {
+        android.view.View seam = seamId == 0 ? null : host.findViewById(seamId);
+        android.view.View tot = totalId == 0 ? null : host.findViewById(totalId);
+        if (seam == null || !seam.isShown() || seam.getWidth() <= 0 || !(tot instanceof android.widget.TextView) || tot.getWidth() <= 0) return;
+        // a ponta direita do desenho na ponta direita do texto do tempo total (como na teste.164)
+        android.graphics.RectF gs = glyph(seam);
+        if (gs.width() <= 0 || gs.left < -1 || gs.right > seam.getWidth() + 1) gs.set(0, 0, seam.getWidth(), seam.getHeight());
+        if (gs.left <= 0.5f && gs.right >= seam.getWidth() - 0.5f) {
+            // medido nos prints: o desenho ocupa de ~32% a ~96% da largura da view
+            gs.left = seam.getWidth() * 0.32f;
+            gs.right = seam.getWidth() * 0.957f;
+        }
+        int[] sl = new int[2], tl = new int[2];
+        seam.getLocationOnScreen(sl);
+        tot.getLocationOnScreen(tl);
+        android.widget.TextView tv = (android.widget.TextView) tot;
+        float right = tl[0] + textRight(tv) - tv.getLeft() - tv.getTranslationX();
+        float raw = right - (sl[0] - seam.getTranslationX() + gs.right);
+        float want = Math.abs(raw) > 64 * seam.getResources().getDisplayMetrics().density ? 0f : raw;
+        if (Math.abs(seam.getTranslationX() - want) > 0.5f) seam.setTranslationX(want);
+        if (seam.getScaleX() != 1f) { seam.setScaleX(1f); seam.setScaleY(1f); }
+        if (logS++ < 6) plog("saída de áudio: fim do tempo=" + right + " precisa " + raw + " desloca " + want);
+    }
+
+    static android.graphics.RectF glyph(android.view.View v) {
+        android.graphics.RectF r = new android.graphics.RectF(0, 0, v.getWidth(), v.getHeight());
+        android.view.View iv = v;
+        float ox = 0, oy = 0;
+        if (!(v instanceof android.widget.ImageView) && v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                android.view.View c = g.getChildAt(i);
+                if (c instanceof android.widget.ImageView && c.getVisibility() == android.view.View.VISIBLE && c.getWidth() > 0) {
+                    iv = c;
+                    ox = c.getLeft() + c.getTranslationX();
+                    oy = c.getTop() + c.getTranslationY();
+                    break;
+                }
+            }
+        }
+        if (iv instanceof android.widget.ImageView) {
+            android.widget.ImageView im = (android.widget.ImageView) iv;
+            android.graphics.drawable.Drawable d = im.getDrawable();
+            int dw = d == null ? 0 : d.getIntrinsicWidth(), dh = d == null ? 0 : d.getIntrinsicHeight();
+            if (im.getScaleType() == android.widget.ImageView.ScaleType.FIT_XY || dw <= 0 || dh <= 0) {
+                r.set(im.getPaddingLeft(), im.getPaddingTop(), im.getWidth() - im.getPaddingRight(), im.getHeight() - im.getPaddingBottom());
+            } else {
+                r.set(0, 0, dw, dh);
+                im.getImageMatrix().mapRect(r);
+                r.offset(im.getPaddingLeft(), im.getPaddingTop());
+            }
+            r.offset(ox, oy);
+        }
+        return r;
+    }
+
+    static float textLeft(android.widget.TextView t) {
+        android.text.Layout l = t.getLayout();
+        return t.getLeft() + t.getTranslationX() + t.getTotalPaddingLeft() + (l == null || l.getLineCount() == 0 ? 0f : l.getLineLeft(0));
+    }
+
+    static void nearby(android.view.View v, int l, int t, int r, int bt, StringBuilder b, int depth) {
+        if (depth > 8 || v.getVisibility() != android.view.View.VISIBLE) return;
+        int[] p = new int[2];
+        v.getLocationOnScreen(p);
+        boolean in = p[0] < r && p[0] + v.getWidth() > l && p[1] < bt && p[1] + v.getHeight() > t;
+        if (!in) return;
+        if (!(v instanceof android.view.ViewGroup) || v.getWidth() < 300) {
+            String n = "?";
+            try { if (v.getId() != android.view.View.NO_ID) n = v.getResources().getResourceEntryName(v.getId()); } catch (Throwable ignored) {}
+            b.append(' ').append(v.getClass().getName()).append('#').append(n).append('@').append(p[0]).append(',').append(p[1])
+                    .append(' ').append(v.getWidth()).append('x').append(v.getHeight()).append(" a=").append(v.getAlpha()).append(';');
+        }
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) nearby(g.getChildAt(i), l, t, r, bt, b, depth + 1);
+        }
+    }
+
+    static float textRight(android.widget.TextView t) {
+        android.text.Layout l = t.getLayout();
+        if (l == null || l.getLineCount() == 0) return t.getRight() + t.getTranslationX() - t.getTotalPaddingRight();
+        // texto alinhado à direita ou que corre: a linha é medida numa largura enorme e o "fim" dela
+        // sai fora da view; aí vale a borda de dentro da própria view
+        float content = t.getWidth() - t.getTotalPaddingLeft() - t.getTotalPaddingRight();
+        float lr = l.getLineRight(0);
+        if (lr > content + 1f || lr <= 0f) lr = content;
+        return t.getLeft() + t.getTranslationX() + t.getTotalPaddingLeft() + lr;
+    }
 
     /** Título/artista: do lugar no cartão normal até centralizado (texto longo: começa na margem e corre). */
     static void slideText(android.widget.TextView t, int[] n, float p, float q, float iconShift) {
@@ -512,8 +688,12 @@ final class OriginPlayer {
                         android.view.View card = (android.view.View) p.args[0];
                         android.view.View art = artId == 0 ? null : card.findViewById(artId);
                         if (art == null) return;
+                        boolean w = wide(card);
+                        if (w) unhide();
                         android.view.View icon = lyricIcon(card);
-                        if (icon != null) placeIcon(icon, card, art);
+                        if (icon == null) return;
+                        if (w) placeIcon(icon, card, art);
+                        else hideBehind(icon, card, art);
                     } catch (Throwable t) {
                         if (logI++ < 6) plog("ícone de letras: " + t);
                     }
@@ -523,12 +703,13 @@ final class OriginPlayer {
         } catch (Throwable t) {
             plog("HMC sem assertMediaCard: " + t);
         }
-        // o HMC encosta o título na esquerda enquanto a capa expande; com este player quem posiciona somos nós
+        // o HMC encosta o título na esquerda enquanto a capa expande; com a capa expandida quem
+        // posiciona somos nós. Recolhido, o HMC continua afastando título e artista do ícone de letras.
         try {
             java.lang.reflect.Method m = hmc.getDeclaredMethod("alignCardTextLeft", android.view.View.class, android.widget.TextView.class, float.class, float.class);
             XposedBridge.hookMethod(m, new XC_MethodHook() {
                 protected void beforeHookedMethod(MethodHookParam p) {
-                    if (Prefs.playerOrigin) p.setResult(null);
+                    if (Prefs.playerOrigin && p.args[0] instanceof android.view.View && wide((android.view.View) p.args[0])) p.setResult(null);
                 }
             });
             alignHooked = true;

@@ -254,6 +254,23 @@ final class CurtainClock {
                 add.invoke(second, Refl.get(second, "mInClockBean"), Boolean.FALSE);
                 mc.getMethod("onAttachedToWindow").invoke(second);
             }
+            if (tid != null && tid.startsWith("all_in_one")) {
+                // modelos do HyperOS 4: o HOS3 não os conhece (mostraria o relógio padrão). Usa a mesma
+                // biblioteca do bloqueio, parada (aqui quem encolhe/sobe é a cortina)
+                // (fica na extensão Hyper Eternity Relógios; sem ela, segue o relógio do HOS3)
+                View v4 = Ext.curtainClock(root.getContext());
+                if (v4 != null) {
+                    release();
+                    box.removeAllViews();
+                    box.addView(v4, new FrameLayout.LayoutParams(-1, -1));
+                    model = tid;
+                    nTid = null;
+                    nTop = nBot = -1;
+                    if (boxN != null) boxN.removeAllViews();
+                    log("modelo " + tid + " (relógio do HOS4)");
+                    return;
+                }
+            }
             model = tid;
             if ("magazine_c".equals(tid)) prepMagazineC();
             nTid = null;

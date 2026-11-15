@@ -25,6 +25,8 @@ public class ModernMain extends XposedModule {
         try {
             GroupAuto.install(param.getClassLoader());
             ConvSplit.install(param.getClassLoader());
+            MemKeep.install(param.getClassLoader());
+            AudioSplit.install();
             FullText.install("sistema");
         } catch (Throwable t) {
             XposedBridge.log("[HeadsUpIlha] ERRO no sistema: " + t);
@@ -36,6 +38,10 @@ public class ModernMain extends XposedModule {
         XposedBridge.init(this);
         try {
             String pk = param.getPackageName();
+            // só o processo principal de cada app: os auxiliares (captura de tela, sincronização,
+            // notificações push…) não têm nada nosso e só gastariam memória e tempo de partida
+            String proc = android.app.Application.getProcessName();
+            if (proc != null && !proc.equals(pk)) return;
             if ("com.google.android.inputmethod.latin".equals(pk)) {
                 if (claim("gboard")) KbBlur.install(param.getDefaultClassLoader());
                 return;
@@ -47,6 +53,10 @@ public class ModernMain extends XposedModule {
             if ("com.yzc26623.HyperImmersive".equals(pk)) {
                 // StandBy da extensão HyperImmersive (HyperMusicCover): letras no nosso estilo
                 if (claim("standby")) StandbyLyrics.install(param.getDefaultClassLoader());
+                return;
+            }
+            if ("com.miui.home".equals(pk)) {
+                if (claim("home")) HomeRecents.install(param.getDefaultClassLoader());
                 return;
             }
             if (!"com.android.systemui".equals(pk)) return;

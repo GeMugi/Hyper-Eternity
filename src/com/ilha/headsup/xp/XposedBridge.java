@@ -84,6 +84,16 @@ public final class XposedBridge {
     }
 
     /** Dados do APK do módulo (para ler os assets dele em processos que não enxergam o app). */
+    /** Faz um método voltar a rodar sem otimizações (quem tinha um método nosso "embutido" passa a chamá-lo). */
+    public static boolean deoptimize(java.lang.reflect.Executable m) {
+        XposedInterface a = api;
+        try {
+            return a != null && a.deoptimize(m);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     public static android.content.pm.ApplicationInfo moduleInfo() {
         XposedInterface a = api;
         try {

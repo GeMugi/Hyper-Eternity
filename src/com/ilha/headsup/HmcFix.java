@@ -121,8 +121,38 @@ public final class HmcFix {
         }
         active = true;
         lyrics(l);
+        nullSession(l);
         log("encontrado; correções do HyperOS 3 ativas");
     }
+
+    /**
+     * O HMC atualiza o player com o controle da sessão de mídia sem conferir se ele ainda existe. Quando
+     * a sessão some no meio (troca de saída de áudio, app que recria a sessão), ele derrubava a Interface
+     * do Sistema em loop. Sem controle, a atualização é pulada.
+     */
+    static void nullSession(ClassLoader l) {
+        try {
+            Class<?> c = Class.forName("com.os4.musiccover.d0", false, l);
+            int n = 0;
+            for (Method m : c.getDeclaredMethods()) {
+                Class<?>[] pt = m.getParameterTypes();
+                if (!Modifier.isStatic(m.getModifiers()) || pt.length == 0 || pt[0] != MediaController.class) continue;
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    protected void beforeHookedMethod(MethodHookParam p) {
+                        if (p.args[0] != null) return;
+                        p.setResult(null);
+                        if (nullLogs++ < 5) log("player: sessão de mídia sumiu, atualização pulada (" + p.method.getName() + ")");
+                    }
+                });
+                n++;
+            }
+            log("player: " + n + " atualizações protegidas contra sessão vazia");
+        } catch (Throwable t) {
+            log("player: sem proteção de sessão vazia: " + t);
+        }
+    }
+
+    static int nullLogs;
 
     /** A chamada vem do HMC? (alguma das classes na pilha é dele) */
     static boolean fromHmc() {
@@ -188,7 +218,7 @@ public final class HmcFix {
                     step(iv);
                 } catch (Throwable ignored) {
                 }
-                if (iv.isAttachedToWindow() || iv.getParent() != null) iv.postDelayed(this, 120);
+                if (iv.isAttachedToWindow() || iv.getParent() != null) iv.postDelayed(this, iv.isShown() && Power.interactive() ? 120 : 1000);
             }
         });
     }
@@ -197,6 +227,9 @@ public final class HmcFix {
         int[] st = tints.get(iv);
         Drawable d = iv.getDrawable();
         if (st == null || !(d instanceof GradientDrawable) || !iv.isShown()) return;
+        // o HMC trocou a cor (ex.: modo claro/escuro): ela vira a nova base
+        android.content.res.ColorStateList now = ((GradientDrawable) d).getColor();
+        if (now != null && now.getDefaultColor() != st[1]) st[0] = st[1] = now.getDefaultColor();
         int bg = background(iv);
         int base = st[0];
         int want = base;

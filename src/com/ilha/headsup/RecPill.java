@@ -338,13 +338,22 @@ final class RecPill {
         if (h == null) h = new android.os.Handler(android.os.Looper.getMainLooper());
         h.postDelayed(new Runnable() {
             public void run() {
+                long next = 1000;
                 try {
-                    pollProjection();
-                    int w = wanted();
-                    if ((w == 0) != (prog <= 0f) || (w != 0 && w != color)) refresh();
+                    Prefs.refresh();
+                    boolean any = Prefs.recPill || Prefs.hotPill || Prefs.locPill;
+                    if (!Power.interactive()) {
+                        next = 3000;   // tela apagada: ninguém vê a pílula
+                    } else if (any || prog > 0f) {
+                        pollProjection();
+                        int w = wanted();
+                        if ((w == 0) != (prog <= 0f) || (w != 0 && w != color)) refresh();
+                    } else {
+                        next = 3000;   // pílulas desligadas
+                    }
                 } catch (Throwable ignored) {
                 }
-                h.postDelayed(this, 1000);
+                h.postDelayed(this, next);
             }
         }, 1000);
     }

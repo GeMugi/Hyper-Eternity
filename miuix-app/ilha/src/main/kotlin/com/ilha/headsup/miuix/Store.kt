@@ -318,6 +318,11 @@ class Store(
     val privOn = b("priv_on", false)
     val privUnlocked = b("priv_unlocked", false)
     val privApps = l("priv_apps")
+    val audioSplit = b("audio_split", false)
+    val audioSplitApps = l("audio_split_apps")
+    val canvasCard = b("canvas_card", false)
+    val highEnd = b("high_end", false)
+    val memKeep = b("mem_keep", false)
     val privConvs = l("priv_convs")
     val privContacts = l("priv_contacts")
     val privSeen = l("priv_seen")   // só leitura: o módulo anota as conversas vistas

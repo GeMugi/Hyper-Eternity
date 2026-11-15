@@ -807,6 +807,7 @@ private fun LazyListScope.musicPage(store: Store, backdrop: LayerBackdrop?) {
         Toggle(store.playerOrigin, "Player estilo OriginOS", "Capa grande à esquerda e controles embaixo, como no OriginOS.")
         Toggle(store.playerIos, "Player da central no estilo ColorOS (teste)", "Capa de ponta a ponta que some num degradê.")
         Toggle(store.mediaPure, "Fundo igual às notificações", "O player usa o mesmo vidro das notificações.")
+        Toggle(store.canvasCard, "Canvas no fundo do player", "Com o HyperCanvas, o vidro do player mostra o vídeo do Canvas.")
         Toggle(store.explicitE, "Selo E de conteúdo explícito", "Selo \"E\" antes do título das músicas explícitas.")
         Toggle(store.mediaEdge, "Título com as pontas desfocadas", "Nomes longos rolam com as pontas desfocadas.")
     }
@@ -1047,6 +1048,48 @@ private fun LazyListScope.privacyApps(store: Store, backdrop: LayerBackdrop?) {
     }
 }
 
+/** Apps que tocam no alto-falante com o Bluetooth conectado. */
+private fun LazyListScope.audioApps(store: Store, backdrop: LayerBackdrop?) {
+    item(key = "audioapps") {
+        val context = LocalContext.current
+        val apps by produceState<List<AppRow>?>(null) {
+            value = withContext(Dispatchers.IO) {
+                try {
+                    val pm = context.packageManager
+                    val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                    pm.queryIntentActivities(i, 0)
+                        .distinctBy { it.activityInfo.packageName }
+                        .map { AppRow(it.activityInfo.packageName, it.loadLabel(pm).toString(), try { drawableBitmap(it.loadIcon(pm)) } catch (t: Throwable) { null }) }
+                        .sortedBy { it.label.lowercase() }
+                } catch (t: Throwable) {
+                    emptyList()
+                }
+            }
+        }
+        SmallTitle(text = tr("Apps que tocam no alto-falante"))
+        GlassCard(backdrop) {
+            val list = apps
+            if (list == null) {
+                CardText("Carregando os apps…")
+            } else {
+                list.forEach { a ->
+                    SwitchPreference(
+                        title = tr(a.label),
+                        summary = tr(a.pkg),
+                        checked = store.audioSplitApps.has(a.pkg),
+                        onCheckedChange = { store.audioSplitApps.set(a.pkg, it) },
+                        startAction = {
+                            if (a.icon != null) {
+                                Image(bitmap = a.icon, contentDescription = null, modifier = Modifier.padding(end = 14.dp).size(36.dp))
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
 private fun LazyListScope.privacyConvApps(store: Store, backdrop: LayerBackdrop?, onPick: (String) -> Unit) {
     item(key = "capps") {
         val context = LocalContext.current
@@ -1138,6 +1181,7 @@ private fun LazyListScope.privacyContacts(store: Store, backdrop: LayerBackdrop?
 private val MusicPkgs = listOf("com.yzc26623.HyperMusicCoverEnhanced", "$MODULE.music")
 
 private fun LazyListScope.extensionsTab(store: Store, backdrop: LayerBackdrop?, context: Context) {
+    clocksExtension(backdrop, context)
     if (!store.musicInstalled.value) {
         section("ext", "HyperMusicCover-Enhanced", backdrop) {
             CardText("Capa e letras no bloqueio. Instale o HyperMusicCover-Enhanced e ative no LSPosed.")
@@ -1181,6 +1225,41 @@ private fun LazyListScope.extensionsTab(store: Store, backdrop: LayerBackdrop?, 
     }
 }
 
+/** Extensão Hyper Eternity Relógios: baixar, atualizar e abrir. */
+private fun LazyListScope.clocksExtension(backdrop: LayerBackdrop?, context: Context) {
+    item(key = "rel") {
+        LaunchedEffect(Unit) { ExtInstall.refresh(context) }
+        val inst = ExtInstall.installed.value
+        val latest = ExtInstall.latest.value
+        val busy = ExtInstall.busy.value
+        val p = ExtInstall.progress.floatValue
+        SmallTitle(text = tr("Relógios do HyperOS 4"))
+        GlassCard(backdrop) {
+            CardText("Os relógios All in One do HyperOS 4 no bloqueio e na cortina, que encolhem e sobem com as notificações, e o patcher das bibliotecas do sistema. É uma extensão à parte: depois de instalar, ative no LSPosed.")
+            if (inst != null) {
+                ArrowPreference(
+                    title = tr("Abrir a extensão"),
+                    summary = tr("Versão") + " " + inst,
+                    onClick = { if (!ExtInstall.open(context)) toast(context, "Não consegui abrir a extensão") },
+                )
+            }
+            val status = ExtInstall.status.value
+            val sum = when {
+                busy && p >= 0f -> tr("Baixando") + " " + (p * 100).roundToInt() + "%"
+                status.isNotEmpty() -> status
+                inst == null -> tr("Baixa do GitHub e abre o instalador.")
+                latest != null && inst != null && ExtInstall.newer(latest, inst) -> tr("Nova versão") + ": " + latest
+                else -> tr("Procura uma versão nova no GitHub.")
+            }
+            ArrowPreference(
+                title = tr(if (inst == null) "Baixar e instalar" else "Procurar atualização"),
+                summary = sum,
+                onClick = { ExtInstall.run(context) },
+            )
+        }
+    }
+}
+
 // ------------------------------------------------------------------ Ajustes
 
 private fun LazyListScope.settingsTab(
@@ -1192,6 +1271,12 @@ private fun LazyListScope.settingsTab(
     onImport: () -> Unit,
     onReset: () -> Unit,
 ) {
+    section("sy", "Sistema", backdrop) {
+        Toggle(store.highEnd, "Tratar como topo de linha", "Liga os efeitos que o HyperOS corta em aparelhos de entrada, como o vidro nos atalhos do bloqueio e na ilha. Pode pesar. Reinicie a Interface do Sistema.")
+        Toggle(store.memKeep, "Segurar apps em segundo plano", "A limpeza preventiva da Xiaomi deixa de fechar os apps dos recentes enquanto houver memória de sobra. Depois de ligar, reinicie o celular uma vez.")
+        Toggle(store.audioSplit, "Apps no alto-falante com Bluetooth", "Com fone ou caixa Bluetooth conectados, os apps escolhidos tocam no alto-falante do celular; os outros continuam no Bluetooth. Precisa do Sistema Android marcado no LSPosed.")
+    }
+    if (store.audioSplit.value) audioApps(store, backdrop)
     section("ap", "Aparência", backdrop) {
         OverlayDropdownPreference(
             title = tr("Tema do app"),

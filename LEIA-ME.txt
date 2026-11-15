@@ -8,3 +8,10 @@ miuix-app/    App de ajustes em miuix (Kotlin/Compose), módulo :ilha compilado 
               miuix (github.com/compose-miuix-ui/miuix, commit f36cbc9).
               build.yml.example é o workflow do GitHub Actions usado para isso.
               Para assinar, crie a sua própria chave (o build.gradle.kts procura teste.jks).
+
+relogios/     Extensão Hyper Eternity Relógios (outro app e outro módulo do LSPosed).
+              relogios/hooks/src são os ganchos e o patcher (Java), compilados como os de src/ e
+              juntados em relogios/app/libs/relogios-hooks.jar; relogios/app é o módulo :relogios
+              (Kotlin/Compose), compilado dentro do miuix junto com o :ilha.
+              Em src/, Keys.TEST = true liga os diagnósticos e os recursos em experiência
+              (versão de teste); a estável é compilada com false.

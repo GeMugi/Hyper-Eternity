@@ -28,7 +28,7 @@ final class Prefs {
     static boolean stEnabled, stGroups, landSplit, landMini;
     static boolean lockWidgets, lwBattery = true, lwWeather = true, lwAgenda = true, lwSteps = true;
     static int stOffset;
-    static boolean kgEnabled, kgScroll, kgIos, kgClock, kgClockFixed, kgBlur, kgHmc, kgKeep;
+    static boolean kgEnabled, kgScroll, kgIos, kgClock, kgClockFixed, kgBlur, kgHmc, kgKeep, kgIslandAnim;
     static int kgOffset, kgStart;
     static int mvText = Keys.D_MV_TEXT, mvTrack = Keys.D_MV_TRACK, mvPlayed = Keys.D_MV_PLAYED;
     static int mvExtra = Keys.D_MV_EXTRA;
@@ -41,6 +41,7 @@ final class Prefs {
     static int sheetClock = 60;
     static boolean bodyVib, glassEdge, sheetLockClock;
     static int glassEdgeN = 50;
+    static boolean highEnd;
     static int bodyVibN = 70;
     static boolean groupClear, groupVib;
     static int recColor = 0xFFFF3B30, locColor = 0xFF0A84FF, hotColor = 0xFF34C759;
@@ -59,6 +60,7 @@ final class Prefs {
     static String[] lyricFonts = new String[8];
     static boolean lyricDim = Keys.D_LYRIC_DIM;
     static boolean lyricStandby = Keys.D_LYRIC_STANDBY;
+    static boolean canvasCard = Keys.D_CANVAS_CARD;
     static int lyricRainAmt = Keys.D_LYRIC_RAIN_AMT, lyricRainSlide = Keys.D_LYRIC_RAIN_SLIDE;
     static int lyricDimPct = Keys.D_LYRIC_DIM_PCT;
     static boolean barOn = Keys.D_BAR_ON, sheetPlayerFree = Keys.D_SHEET_PLAYER_FREE;
@@ -87,6 +89,7 @@ final class Prefs {
         kgIos = Keys.D_KG_IOS;
         kgStart = Keys.D_KG_START;
         kgClock = Keys.D_KG_CLOCK;
+        kgIslandAnim = Keys.D_KG_ISLAND_ANIM;
         kgClockFixed = Keys.D_KG_CLOCK_FIXED;
         kgBlur = Keys.D_KG_BLUR;
         kgHmc = Keys.D_KG_HMC;
@@ -191,6 +194,7 @@ final class Prefs {
         kgIos = b(p, Keys.KG_IOS, Keys.D_KG_IOS);
         kgStart = clamp(p.getInt(Keys.KG_START, Keys.D_KG_START), 25, 90);
         kgClock = b(p, Keys.KG_CLOCK, Keys.D_KG_CLOCK);
+        kgIslandAnim = b(p, Keys.KG_ISLAND_ANIM, Keys.D_KG_ISLAND_ANIM);
         kgClockFixed = b(p, Keys.KG_CLOCK_FIXED, Keys.D_KG_CLOCK_FIXED);
         kgBlur = b(p, Keys.KG_BLUR, Keys.D_KG_BLUR);
         kgHmc = b(p, Keys.KG_HMC, Keys.D_KG_HMC);
@@ -208,6 +212,7 @@ final class Prefs {
         sheetLockClock = b(p, Keys.SHEET_LOCKCLOCK, false);
         glassEdge = false;   // vidro estilo HyperOS 4: retirado
         glassEdgeN = clamp(p.getInt(Keys.GLASS_EDGE_N, 50), 0, 100);
+        highEnd = b(p, Keys.HIGH_END, Keys.D_HIGH_END);
         bodyVibN = clamp(p.getInt(Keys.BODY_VIB_N, 70), 0, 100);
         notifBloom = b(p, Keys.NOTIF_BLOOM, Keys.D_NOTIF_BLOOM);
         modalFull = b(p, Keys.MODAL_FULL, Keys.D_MODAL_FULL);
@@ -274,6 +279,7 @@ final class Prefs {
         lyricRain = b(p, Keys.LYRIC_RAIN, Keys.D_LYRIC_RAIN);
         lyricDim = b(p, Keys.LYRIC_DIM, Keys.D_LYRIC_DIM);
         lyricStandby = b(p, Keys.LYRIC_STANDBY, Keys.D_LYRIC_STANDBY);
+        canvasCard = b(p, Keys.CANVAS_CARD, Keys.D_CANVAS_CARD);
         lyricRainAmt = clamp(p.getInt(Keys.LYRIC_RAIN_AMT, Keys.D_LYRIC_RAIN_AMT), 10, 300);
         lyricRainSlide = clamp(p.getInt(Keys.LYRIC_RAIN_SLIDE, Keys.D_LYRIC_RAIN_SLIDE), 0, 200);
         lyricDimPct = clamp(p.getInt(Keys.LYRIC_DIM_PCT, Keys.D_LYRIC_DIM_PCT), 10, 100);

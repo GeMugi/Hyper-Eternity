@@ -1,4 +1,5 @@
-# Hyper Eternity miuix (final): o módulo inteiro com a tela de ajustes em miuix.
+# Hyper Eternity miuix (final): o módulo inteiro com a tela de ajustes em miuix,
+# e a extensão Hyper Eternity Relógios (outro app, módulo :relogios).
 # O código vai compactado em ilha.tar.xz, na raiz deste repositório.
 # O GitHub compila e deixa o APK no ramo "apk" (e o log, se der erro, no ramo "log").
 name: Compilar Hyper Eternity miuix
@@ -39,6 +40,7 @@ jobs:
         run: |
           tar -xJf repo/ilha.tar.xz -C miuix
           printf '\ninclude(":ilha")\n' >> miuix/settings.gradle.kts
+          if [ -d miuix/relogios ]; then printf 'include(":relogios")\n' >> miuix/settings.gradle.kts; fi
           # Memória mais modesta que a do miuix (8 GB), para caber nas máquinas de repositório privado.
           sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8/' miuix/gradle.properties
           printf '\nkotlin.daemon.jvmargs=-Xmx2560m\n' >> miuix/gradle.properties
@@ -57,12 +59,15 @@ jobs:
         working-directory: miuix
         run: |
           set -o pipefail
-          ./gradlew :ilha:assembleRelease --stacktrace 2>&1 | tee ../build.log
+          T=":ilha:assembleRelease"
+          if [ -d relogios ]; then T="$T :relogios:assembleRelease"; fi
+          ./gradlew $T --stacktrace 2>&1 | tee ../build.log
 
       - name: Separar o APK
         run: |
           cp miuix/ilha/build/outputs/apk/release/*.apk Hyper-Eternity.apk
-          ls -l Hyper-Eternity.apk
+          if [ -d miuix/relogios ]; then cp miuix/relogios/build/outputs/apk/release/*.apk Hyper-Eternity-Relogios.apk; fi
+          ls -l Hyper-Eternity*.apk
 
       - name: Guardar o APK
         uses: actions/upload-artifact@v7
@@ -74,9 +79,9 @@ jobs:
       - name: Publicar no ramo apk
         run: |
           mkdir out && cd out
-          cp ../Hyper-Eternity.apk .
+          cp ../Hyper-Eternity*.apk .
           git init -q && git checkout -q -b apk
-          git add Hyper-Eternity.apk
+          git add Hyper-Eternity*.apk
           git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" \
             commit -q -m "APK da execução ${{ github.run_number }} (final)"
           git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" apk

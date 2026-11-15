@@ -22,6 +22,7 @@ Módulo LSPosed para **HyperOS 3 / HyperOS 4** (Android 16/17) que muda as notif
 | Player | Estilo OriginOS ou ColorOS, vibrancy estilo iOS, capa que gira e brilha, selo E | OriginOS / ColorOS style player, iOS-style vibrancy |
 | Letras | Estilo vídeo lírico (pincel ou neon com chuva no vidro), fontes trocáveis, fundo escuro, também no StandBy | Lyric video style lyrics (brush or neon with rain), custom fonts, StandBy |
 | Bloqueio | Empilhar, rolar sem desbloquear, relógio que acompanha, desfoque do topo | Lock screen stacking & scrolling |
+| Relógios do HyperOS 4 | Extensão à parte: relógios All in One no bloqueio e na cortina, patcher de bibliotecas do sistema, efeitos nos números e balanço do papel de parede | Separate extension: HyperOS 4 All in One clocks, system library patcher, digit effects and wallpaper bounce |
 | App | Tela de ajustes em miuix: fundo animado, vidro fosco, barra flutuante | miuix settings app |
 
 ## Estrutura / Layout

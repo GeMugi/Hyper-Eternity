@@ -28,6 +28,7 @@ final class PureBlur {
                     try {
                         Object v = p.args[0];
                         if (!(v instanceof View) || !isPlayerBg((View) v) || !(p.args[1] instanceof int[])) return;
+                        CanvasCard.attach((View) v);
                         Prefs.refresh();
                         if (!Prefs.mediaPure) return;
                         int[] like = notifBlend((View) v, (int[]) p.args[1]);

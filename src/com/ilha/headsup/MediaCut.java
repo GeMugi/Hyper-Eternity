@@ -98,19 +98,14 @@ final class MediaCut {
         final Object artistO = Refl.get(holder, "artistText");
         final TextView artist = artistO instanceof TextView ? (TextView) artistO : null;
         final android.content.res.ColorStateList artistOrig = artist != null ? artist.getTextColors() : null;
+        // botões do player (action0..4): o HyperOS não diz quem é quem pelo id, então o de tocar/pausar
+        // é reconhecido pela descrição (ou fica o do meio) e os outros ganham o vibrance
         final java.util.ArrayList<android.widget.ImageView> skips = new java.util.ArrayList<>();
         for (String f : new String[]{"action0", "action1", "action2", "action3", "action4"}) {
             Object o = Refl.get(holder, f);
-            if (!(o instanceof android.widget.ImageView)) continue;
-            android.widget.ImageView ib = (android.widget.ImageView) o;
-            String nm = "";
-            try {
-                if (ib.getId() != View.NO_ID) nm = ib.getResources().getResourceEntryName(ib.getId()).toLowerCase();
-            } catch (Throwable ignored) {
-            }
-            if (nm.contains("prev") || nm.contains("next")) skips.add(ib);
+            if (o instanceof android.widget.ImageView) skips.add((android.widget.ImageView) o);
         }
-        if (logs < 12) ElasticCard.log("vibrance extra: artista=" + (artist != null) + " botões de pular=" + skips.size());
+        if (logs < 12) ElasticCard.log("vibrance extra: artista=" + (artist != null) + " botões=" + skips.size());
         // o player compacto da paisagem desenha a capa e os botões deste player (os mesmos drawables)
         try {
             java.util.ArrayList<java.lang.ref.WeakReference<android.widget.ImageView>> acts = new java.util.ArrayList<>();
@@ -128,6 +123,7 @@ final class MediaCut {
         bar.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
             int lastKey = Integer.MIN_VALUE;
             boolean extraOn;
+            android.graphics.BlendMode lastBm;
 
             public boolean onPreDraw() {
                 refresh();
@@ -168,11 +164,24 @@ final class MediaCut {
                         }
                     }
                     skipPaint.setBlendMode(bm);
-                    for (android.widget.ImageView ib : skips) {
+                    int play = playIndex(skips);
+                    for (int i = 0; i < skips.size(); i++) {
+                        android.widget.ImageView ib = skips.get(i);
+                        if (i == play) {
+                            if (ib.getLayerType() == View.LAYER_TYPE_HARDWARE && ib.getTag(TAG_VIB) != null) {
+                                ib.setImageTintList(null);
+                                ib.setLayerType(View.LAYER_TYPE_NONE, null);
+                                ib.setTag(TAG_VIB, null);
+                            }
+                            continue;
+                        }
                         android.content.res.ColorStateList tl = ib.getImageTintList();
                         if (tl == null || tl.getDefaultColor() != col) ib.setImageTintList(android.content.res.ColorStateList.valueOf(col));
                         if (ib.getLayerType() != View.LAYER_TYPE_HARDWARE || !extraOn) ib.setLayerType(View.LAYER_TYPE_HARDWARE, skipPaint);
+                        else if (bm != lastBm) ib.setLayerPaint(skipPaint);   // trocou claro/escuro: a camada guarda a mistura antiga
+                        ib.setTag(TAG_VIB, Boolean.TRUE);
                     }
+                    lastBm = bm;
                     extraOn = true;
                 } else if (extraOn) {
                     extraOn = false;
@@ -181,14 +190,39 @@ final class MediaCut {
                         if (artistOrig != null) artist.setTextColor(artistOrig);
                     }
                     for (android.widget.ImageView ib : skips) {
+                        if (ib.getTag(TAG_VIB) == null) continue;
                         ib.setImageTintList(null);
                         ib.setLayerType(View.LAYER_TYPE_NONE, null);
+                        ib.setTag(TAG_VIB, null);
                     }
                 }
             }
         });
         bar.invalidate();
         if (logs++ < 4) ElasticCard.log("barra vazada: ligada (" + n + " partes)");
+    }
+
+    static final int TAG_VIB = 0x7e1a0c51;
+
+    /** Qual dos botões é o de tocar/pausar: pela descrição; sem descrição, o do meio dos visíveis. */
+    static int playIndex(java.util.List<android.widget.ImageView> l) {
+        int mid = -1, vis = 0;
+        for (int i = 0; i < l.size(); i++) {
+            android.widget.ImageView ib = l.get(i);
+            if (ib.getVisibility() != View.VISIBLE) continue;
+            vis++;
+            CharSequence cd = ib.getContentDescription();
+            if (cd != null) {
+                String s = cd.toString().toLowerCase();
+                if (s.contains("play") || s.contains("pause") || s.contains("paus") || s.contains("reproduz") || s.contains("tocar")) return i;
+            }
+        }
+        int k = 0;
+        for (int i = 0; i < l.size(); i++) {
+            if (l.get(i).getVisibility() != View.VISIBLE) continue;
+            if (k++ == vis / 2) mid = i;
+        }
+        return mid;
     }
 
     /** Troca a barra inteira pela nossa (o HyperOS usa uma barra própria, não em camadas). */
@@ -278,19 +312,25 @@ final class MediaCut {
             protected void beforeHookedMethod(MethodHookParam p) {
                 try {
                     Object v = p.thisObject;
-                    if (!Prefs.cometBar || !(v instanceof SeekBar)) return;
+                    if (!(v instanceof SeekBar) || (!Prefs.cometBar && !Prefs.mediaCut)) return;
                     Object cm = ((SeekBar) v).getTag(TAG_COMET);
                     if (!(cm instanceof Comet)) return;
                     Comet co = (Comet) cm;
-                    // tocando, a barra inteira é nossa; pausada, volta a barra do sistema (com uma
-                    // passagem suave entre as duas)
-                    float a = co.step();
                     co.overlay = 0f;
+                    if (!Prefs.cometBar) {
+                        // só "Barra e tempos como no iOS": a barra do HyperOS dá lugar à de vibrance
+                        if (co.drawIos((Canvas) p.args[0])) p.setResult(null);
+                        return;
+                    }
+                    // tocando, a barra inteira é nossa; pausada, volta a barra do sistema (com uma
+                    // passagem suave entre as duas) ou, com a opção do iOS, a barra de vibrance
+                    float a = co.step();
                     if (a >= 0.99f) {
                         if (co.draw((Canvas) p.args[0])) p.setResult(null);
                     } else {
                         co.overlay = a;
                         if (a <= 0.01f) co.keepAlive();
+                        if (Prefs.mediaCut && co.drawIos((Canvas) p.args[0])) p.setResult(null);
                     }
                 } catch (Throwable t) {
                     if (logs++ < 8) ElasticCard.log("cometa: erro " + t);
@@ -309,7 +349,9 @@ final class MediaCut {
                     SeekBar b = (SeekBar) v;
                     int w = b.getWidth(), h = b.getHeight();
                     int sl = c.saveLayerAlpha(-w, -h, 2 * w, 2 * h, Math.round(255 * co.overlay));
+                    co.noTrack = Prefs.mediaCut;   // o trilho de vibrance já está embaixo (e não mistura dentro da camada)
                     co.draw(c);
+                    co.noTrack = false;
                     c.restoreToCount(sl);
                 } catch (Throwable t) {
                     if (logs++ < 8) ElasticCard.log("cometa: erro " + t);
@@ -497,6 +539,42 @@ final class MediaCut {
         }
 
         /** Desenha a barra inteira. Falso = deixa a barra do sistema desenhar. */
+        boolean noTrack;
+        int iosLogs;
+
+        /** Barra de vibrance (trilho e parte tocada), no lugar e na grossura da barra do HyperOS. */
+        boolean drawIos(Canvas c) {
+            int w = bar.getWidth(), hgt = bar.getHeight();
+            if (w <= 0 || hgt <= 0) return false;
+            int min = bar.getMin(), max = bar.getMax();
+            float frac = max > min ? Math.max(0f, Math.min(1f, (bar.getProgress() - min) / (float) (max - min))) : 0f;
+            int pad = intField(bar, "mProgressPaddingOffset", bar.getPaddingLeft());
+            int mh = bar.getMaxHeight();
+            int sysH = intField(bar, "mProgressHeight", mh > 0 && mh < hgt ? mh : Math.round(6f * d));
+            int level = intField(bar, "mDeviceLevel", 0);
+            float top = level == 0 ? bar.getPaddingTop() : (hgt - sysH) / 2f;
+            boolean night = night(bar);
+            if (iosLogs++ < 2) ElasticCard.log("barra iOS: desenhada " + w + "x" + hgt + " trilho " + sysH + "px noite=" + night
+                    + " trilho=" + Prefs.mvTrack + "% tocada=" + Prefs.mvPlayed + "% acelerada=" + c.isHardwareAccelerated());
+            int save = c.save();
+            if (bar.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL) c.scale(-1f, 1f, w / 2f, 0f);
+            float r = sysH / 2f;
+            cp.setShader(null);
+            cp.setBlendMode(mode(night));
+            cp.setColor(color(night, Prefs.mvTrack));
+            rf.set(pad, top, w - pad, top + sysH);
+            c.drawRoundRect(rf, r, r, cp);
+            float pw = (w - 2f * pad) * frac;
+            if (pw > 0f) {
+                cp.setColor(color(night, Prefs.mvPlayed));
+                rf.set(pad, top, pad + Math.max(pw, sysH), top + sysH);
+                c.drawRoundRect(rf, r, r, cp);
+            }
+            cp.setBlendMode(null);
+            c.restoreToCount(save);
+            return true;
+        }
+
         boolean draw(Canvas c) {
             unclip();
             int w = bar.getWidth(), hgt = bar.getHeight();
@@ -526,8 +604,19 @@ final class MediaCut {
             // trilho
             cp.setShader(null);
             // trilho: com a grossura do sistema, usa o próprio trilho do HyperOS (mesma cor ao pausar)
-            Object sysBg = Prefs.cometThick <= 0 && level == 0 ? Refl.get(bar, "mBackgroundDrawable") : null;
-            if (sysBg instanceof Drawable) {
+            // com "Barra e tempos como no iOS", o trilho é o vibrance (como sem o cometa)
+            Object sysBg = !Prefs.mediaCut && Prefs.cometThick <= 0 && level == 0 ? Refl.get(bar, "mBackgroundDrawable") : null;
+            if (noTrack) {
+                // nada: desenhado por baixo
+            } else if (Prefs.mediaCut) {
+                cp.setColor(color(night, Prefs.mvTrack));
+                cp.setBlendMode(mode(night));
+                if (Prefs.cometThick <= 0 && level == 0) rf.set(pad, bar.getPaddingTop(), w - pad, bar.getPaddingTop() + sysH);
+                else rf.set(left, cy - rad, right, cy + rad);
+                float rr = rf.height() / 2f;
+                c.drawRoundRect(rf, rr, rr, cp);
+                cp.setBlendMode(null);
+            } else if (sysBg instanceof Drawable) {
                 Drawable bgd = (Drawable) sysBg;
                 bgd.setAlpha(255);
                 bgd.setBounds(pad, bar.getPaddingTop(), w - pad, bar.getPaddingTop() + sysH);
@@ -652,14 +741,18 @@ final class MediaCut {
                 == android.content.res.Configuration.UI_MODE_NIGHT_YES;
     }
 
-    /** "vibrancy" do iOS: no escuro soma luz ao vidro (plus-lighter), no claro multiplica (plus-darker). */
+    /**
+     * "vibrancy" do iOS: no escuro soma luz ao vidro (plus-lighter); no claro tira luz (plus-darker).
+     * O Android não tem o plus-darker; a "diferença" dá o mesmo resultado sobre fundo claro
+     * (fundo − cinza): escurece mantendo a cor do cartão viva, em vez do marrom apagado do multiplicar.
+     */
     static android.graphics.BlendMode mode(boolean night) {
-        return night ? android.graphics.BlendMode.PLUS : android.graphics.BlendMode.MULTIPLY;
+        return night ? android.graphics.BlendMode.PLUS : android.graphics.BlendMode.DIFFERENCE;
     }
 
-    /** Intensidade 0–100 em cinza: no escuro, quanto de luz soma; no claro, quanto escurece. */
+    /** Intensidade 0–100 em cinza: no escuro, quanto de luz soma; no claro, quanto de luz tira. */
     static int color(boolean night, int pct) {
-        int g = night ? Math.round(255f * pct / 100f) : Math.round(255f * (1f - pct / 100f));
+        int g = Math.round(255f * pct / 100f * (night ? 1f : 0.85f));
         g = Math.max(0, Math.min(255, g));
         return 0xFF000000 | (g << 16) | (g << 8) | g;
     }

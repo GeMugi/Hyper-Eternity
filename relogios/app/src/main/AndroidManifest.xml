@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <queries>
+        <package android:name="com.miui.aod" />
+        <package android:name="com.ilha.headsup" />
+        <package android:name="org.lsposed.manager" />
+        <intent>
+            <action android:name="miui.keyguard.editor" />
+        </intent>
+        <intent>
+            <action android:name="miui.keyguard.editor.settings" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:description="@string/relogios_description"
+        android:enableOnBackInvokedCallback="true"
+        android:icon="@mipmap/relogios_launcher"
+        android:roundIcon="@mipmap/relogios_launcher"
+        android:label="@string/relogios_app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Relogios"
+        tools:ignore="UnusedAttribute">
+        <activity
+            android:name="com.ilha.relogios.ui.MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="de.robv.android.xposed.category.MODULE_SETTINGS" />
+            </intent-filter>
+        </activity>
+        <receiver android:name="com.ilha.relogios.SafeReceiver" android:exported="true">
+            <intent-filter><action android:name="com.ilha.headsup.relogios.SAFE_OFF" /></intent-filter>
+        </receiver>
+        <provider
+            android:name="com.ilha.relogios.ServiceProvider"
+            android:authorities="com.ilha.headsup.relogios.XposedService"
+            android:exported="true"
+            android:initOrder="1000" />
+        <meta-data android:name="xposedmodule" android:value="true" />
+        <meta-data android:name="xposeddescription" android:value="@string/relogios_description" />
+        <meta-data android:name="xposedminversion" android:value="102" />
+        <meta-data android:name="xposedscope" android:resource="@array/xposedscope" />
+    </application>
+
+</manifest>
