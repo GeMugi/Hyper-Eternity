@@ -74,10 +74,6 @@ public final class LibModule {
      */
     public static List<Item> prepare(List<LibPatch> wanted, StringBuilder why, boolean root) {
         ArrayList<Item> out = new ArrayList<Item>();
-        if (Hos.isHos4()) {
-            why.append("HyperOS 4: as bibliotecas já vêm com isto ligado\n");
-            return out;
-        }
         for (LibPatch p : wanted) {
             byte[] orig = read(p.path);
             LibPatch.Scan s = p.scan(orig);
@@ -294,11 +290,6 @@ public final class LibModule {
 
     /** Instala o zip pelo gerenciador de root que existir. */
     public static Res install(File zip) {
-        if (Hos.isHos4()) {
-            Res r = new Res();
-            r.out = "HyperOS 4: as bibliotecas já vêm com isto ligado, nada a instalar";
-            return r;
-        }
         String z = zip.getAbsolutePath();
         return su("Z=/data/local/tmp/" + ID + ".zip\n" +
                 "cp '" + z + "' $Z && chmod 644 $Z || exit 3\n" +

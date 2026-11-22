@@ -80,7 +80,7 @@ final class Glass {
             XC_MethodHook eff = new XC_MethodHook() {
                 protected void beforeHookedMethod(MethodHookParam p) {
                     try {
-                        if (Fx.blending() || Fx.shading()) return;   // os efeitos da extensão mandam
+                        if (Fx.blending() || Fx.shading() || Fx.glass()) return;   // os efeitos da extensão mandam
                         if (!(p.args[0] instanceof View) || !tvCls.isInstance(p.args[0]) || p.args[1] == null) return;
                         View v = (View) p.args[0];
                         int effect = ((Integer) mEffect.invoke(p.args[1])).intValue();
@@ -115,7 +115,7 @@ final class Glass {
             XposedBridge.hookMethod(mbu.getMethod("setGlassEffectMethod", View.class, float[].class), new XC_MethodHook() {
                 protected void beforeHookedMethod(MethodHookParam p) {
                     p.setResult(null);
-                    if (!Cfg.frost) return;
+                    if (!Cfg.frost || Fx.glass()) return;
                     try {
                         View v = (View) p.args[0];
                         if (v == null) return;
@@ -130,13 +130,13 @@ final class Glass {
             // sem o fosco: nenhum caminho põe um número com vidro no modo de mistura
             XposedBridge.hookMethod(mbu.getMethod("setMiViewBlurMode", View.class, int.class), new XC_MethodHook() {
                 protected void beforeHookedMethod(MethodHookParam p) {
-                    if (Cfg.frost || !(p.args[0] instanceof View) || !tvCls.isInstance(p.args[0])) return;
+                    if (Cfg.frost || Fx.glass() || !(p.args[0] instanceof View) || !tvCls.isInstance(p.args[0])) return;
                     if (((Integer) p.args[1]).intValue() != 0 && wanted((View) p.args[0])) p.args[1] = ZERO;
                 }
             });
             XC_MethodHook noBlend = new XC_MethodHook() {
                 protected void beforeHookedMethod(MethodHookParam p) {
-                    if (Cfg.frost || p.args.length == 0 || !(p.args[0] instanceof View) || !tvCls.isInstance(p.args[0])) return;
+                    if (Cfg.frost || Fx.glass() || p.args.length == 0 || !(p.args[0] instanceof View) || !tvCls.isInstance(p.args[0])) return;
                     if (wanted((View) p.args[0])) p.setResult(null);
                 }
             };
@@ -192,6 +192,16 @@ final class Glass {
 
     static void before(View v) {
         if (Fx.blending()) return;
+        if (Fx.glass()) {
+            // vidro da lib: o vidro nativo do HOS4 continua desligado; a mistura e o material são os dos cartões
+            try {
+                if (fNative.getBoolean(v)) {
+                    fNative.setBoolean(v, false);
+                    if (mHandle != null) try { mHandle.invoke(v); } catch (Throwable ignored) {}
+                }
+            } catch (Throwable ignored) {}
+            return;
+        }
         try {
             if (fNative.getBoolean(v)) {
                 fNative.setBoolean(v, false);

@@ -64,7 +64,63 @@ final class Aod {
     static final android.util.LruCache<String, android.graphics.Typeface> varCache = new android.util.LruCache<String, android.graphics.Typeface>(400);
     static final java.util.WeakHashMap<android.graphics.Typeface, android.graphics.Typeface> varRoot = new java.util.WeakHashMap<android.graphics.Typeface, android.graphics.Typeface>();
 
+    static final java.util.Map<ClassLoader, Boolean> fontLoaders = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<ClassLoader, Boolean>());
+
+    /**
+     * A tela sempre ativa é um plugin carregado dentro do SystemUI, com um carregador de classes só
+     * dele (não o do app, nem o que a extensão abre). Nele o relógio All in One da tela sempre ativa
+     * já é montado pelo próprio HOS4, mas sem os nossos ajustes: as fontes caíam na padrão (o método
+     * do Android do HOS4 Font.setFontPathMatched não existe aqui) e o tamanho livre ficava desligado.
+     * Assim que esse carregador nasce, recebe os mesmos ajustes que o relógio do bloqueio.
+     */
+    static void plugin() {
+        try {
+            XC_MethodHook h = new XC_MethodHook() {
+                protected void afterHookedMethod(MethodHookParam p) {
+                    if (!(p.args.length > 0 && p.args[0] instanceof String) || !((String) p.args[0]).contains("com.miui.aod")) return;
+                    final ClassLoader cl = (ClassLoader) p.thisObject;
+                    try {
+                        Class.forName("com.miui.clock.utils.FontUtils", false, cl);
+                    } catch (Throwable t) {
+                        return;
+                    }
+                    if (fontLoaders.containsKey(cl)) return;
+                    android.content.res.AssetManager am = null;
+                    try {
+                        android.app.Application app = (android.app.Application) Class.forName("android.app.ActivityThread").getMethod("currentApplication").invoke(null);
+                        am = app.createPackageContext("com.miui.aod", 0).getAssets();
+                    } catch (Throwable t) { }
+                    log("tela sempre ativa (plugin no SystemUI): ajustes do relógio All in One aplicados");
+                    fonts(cl, am);
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
+                        public void run() {
+                            StringBuilder b = new StringBuilder();
+                            Clocks.flip(b, "com.miui.clock.utils.DeviceConfig", cl, "COMPUTILITY_V2_LEVEL", 4);
+                            log("tela sempre ativa: nível do aparelho " + b);
+                        }
+                    });
+                }
+            };
+            int n = 0;
+            for (java.lang.reflect.Constructor<?> c : dalvik.system.PathClassLoader.class.getDeclaredConstructors()) {
+                XposedBridge.hookMethod(c, h);
+                n++;
+            }
+            for (java.lang.reflect.Constructor<?> c : dalvik.system.DexClassLoader.class.getDeclaredConstructors()) {
+                XposedBridge.hookMethod(c, h);
+                n++;
+            }
+            log("tela sempre ativa: aguardando o plugin (" + n + " ganchos)");
+        } catch (Throwable t) {
+            log("tela sempre ativa: " + t);
+        }
+    }
+
     static void fonts(ClassLoader cl, final android.content.res.AssetManager assets) {
+        if (cl != null) {
+            if (fontLoaders.containsKey(cl)) return;
+            fontLoaders.put(cl, Boolean.TRUE);
+        }
         try {
             Class<?> fu = Class.forName("com.miui.clock.utils.FontUtils", false, cl);
             XposedBridge.hookMethod(fu.getDeclaredMethod("createTypefaceWithBypassCache", String.class), new XC_MethodHook() {

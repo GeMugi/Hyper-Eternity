@@ -44,7 +44,7 @@ import java.util.WeakHashMap;
 final class Fx {
     private Fx() {}
 
-    static final int NONE = 0, WALL = 1, DUO = 2, HOLO = 3, GRAIN = 4, RGB = 5, POSTER = 6, TRAIL = 7;
+    static final int NONE = 0, WALL = 1, DUO = 2, HOLO = 3, GRAIN = 4, RGB = 5, POSTER = 6, TRAIL = 7, GLASS = 8;
     /** Modos de mistura oferecidos (números do motor de mistura; os baixos seguem os modos do Skia). */
     static final int[] BLEND_MODES = {0, 15, 21, 14, 18, 24, 22, 23, 12, 28};
 
@@ -65,6 +65,10 @@ final class Fx {
 
     static boolean shading() {
         return Cfg.fx == WALL || Cfg.fx == DUO || Cfg.fx == HOLO || Cfg.fx == POSTER;
+    }
+
+    static boolean glass() {
+        return Cfg.fx == GLASS;
     }
 
     static boolean blending() {
@@ -100,9 +104,12 @@ final class Fx {
                 if (m.getName().equals("setClockEffectsContainer")) {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         protected void beforeHookedMethod(MethodHookParam p) {
-                            if (!blending() || mContainer == null || !(p.args[0] instanceof View)) return;
+                            if (!(blending() || glass()) || mContainer == null || !(p.args[0] instanceof View)) return;
                             try {
-                                mContainer.invoke(null, p.args[0], p.args[1], Boolean.FALSE);
+                                Object rad = p.args[1];
+                                int[] own = glass() ? rc() : null;
+                                if (own != null && own[10] > 0) rad = Integer.valueOf(own[10]);
+                                mContainer.invoke(null, p.args[0], rad, Boolean.FALSE);
                                 p.setResult(null);
                             } catch (Throwable t) {
                                 if (logs++ < 8) log("recipiente: " + t);
@@ -119,6 +126,10 @@ final class Fx {
                                 if (blending()) {
                                     blend(v, ((Integer) p.args[3]).intValue());
                                     p.setResult(null);
+                                } else if (glass()) {
+                                    numbers.add(v);
+                                    libGlass(v);
+                                    p.setResult(null);
                                 } else if (shading()) {
                                     // pintura: o número fica sem a mistura, para a tinta aparecer como é
                                     if (mClearBlend != null) mClearBlend.invoke(null, v);
@@ -132,10 +143,21 @@ final class Fx {
                 }
             }
             XposedBridge.hookMethod(tvCls.getDeclaredMethod("onDraw", Canvas.class), new XC_MethodHook() {
+                protected void afterHookedMethod(MethodHookParam p) {
+                    if (glass()) params((View) p.thisObject, (Canvas) p.args[0]);
+                }
+
                 protected void beforeHookedMethod(MethodHookParam p) {
+                    if (!Lens.states.isEmpty()) Lens.off((View) p.thisObject);
+                    if (glass()) {
+                        View v = (View) p.thisObject;
+                        numbers.add(v);
+                        if (!Integer.valueOf(glassColor()).equals(v.getTag(TAG_NOTIF))) libGlass(v);
+                    }
                     paint((View) p.thisObject);
                 }
             });
+            captureEarly();
             Cfg.watch(new Runnable() {
                 public void run() { refresh(); }
             });
@@ -161,17 +183,398 @@ final class Fx {
     static void refresh() {
         boolean blendChanged = lastBlend != -1 && lastBlend != Cfg.fxBlend;
         boolean fxChanged = lastFx != Cfg.fx;
-        boolean wasShade = lastFx == WALL || lastFx == DUO || lastFx == HOLO || lastFx == POSTER;
+        boolean wasShade = lastFx == WALL || lastFx == DUO || lastFx == HOLO || lastFx == POSTER || lastFx == GLASS;
         lastFx = Cfg.fx;
         lastBlend = Cfg.fxBlend;
         if (fxChanged || blendChanged) {
             log("efeito " + Cfg.fx + ", mistura " + Cfg.fxBlend);
             if (Cfg.fx != NONE || Cfg.fxBlend != 0) Safe.touch("efeitos");
         }
+        if (!glass()) { Lens.offAll(); Rim.detachAll(); for (View n : new ArrayList<View>(numbers)) if (n.getTag(TAG_BLOOM) != null) libGlassOff(n); }
         for (View b : new ArrayList<View>(clocks)) filter(b);
         for (View n : new ArrayList<View>(numbers)) n.invalidate();
-        if (blendChanged || (fxChanged && (shading() || wasShade))) Clocks.rebuildAll("efeito mudou");
+        if (blendChanged || (fxChanged && (shading() || glass() || wasShade))) Clocks.rebuildAll("efeito mudou");
         sensors();
+    }
+
+    // ------------------------------------------------------------------ material das notificações
+
+    static final int TAG_NOTIF = 0x7e1a0e32;
+    /** As cores de mistura que o sistema usa no fundo dos cartões de notificação (lidas quando ele as aplica). */
+    static volatile ArrayList<Point> notifList;
+    static int notifLogs;
+
+    /**
+     * O vidro das notificações é o desfoque de verdade do sistema (enxerga o papel de parede, o HMC,
+     * tudo que está atrás) com uma lista de cores de mistura por cima. O fundo dos cartões recebe essa
+     * lista pelo setMiBackgroundBlendColors: a primeira vez que isso acontece, guardamos a lista e os
+     * números passam a usar exatamente a mesma (desfoque recortado no formato do número).
+     */
+    static void captureNotif() {
+        try {
+            for (final Method m : View.class.getDeclaredMethods()) {
+                if (!m.getName().equals("setMiBackgroundBlendColors") || m.getParameterTypes().length < 1) continue;
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            if (!(p.args[0] instanceof java.util.List)) return;
+                            String n = p.thisObject.getClass().getName();
+                            if (!n.contains("Notification") || !n.contains("Background")) return;
+                            java.util.List<?> l = (java.util.List<?>) p.args[0];
+                            if (l.isEmpty()) return;
+                            ArrayList<Point> c = new ArrayList<Point>();
+                            for (Object o : l) if (o instanceof Point) c.add(new Point((Point) o));
+                            if (c.isEmpty() || c.equals(notifList)) return;
+                            notifList = c;
+                            if (notifLogs++ < 4) {
+                                StringBuilder b = new StringBuilder();
+                                for (Point pt : c) b.append(Integer.toHexString(pt.x)).append('/').append(pt.y).append(' ');
+                                log("material das notificações lido de " + p.thisObject.getClass().getSimpleName() + ": " + b.toString().trim());
+                            }
+                            if (glass()) main.post(new Runnable() {
+                                public void run() {
+                                    for (View v : new ArrayList<View>(numbers)) libGlass(v);
+                                }
+                            });
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            }
+        } catch (Throwable t) {
+            log("material das notificações: " + t);
+        }
+    }
+
+    static final int TAG_BLOOM = 0x7e1a0e33;
+    /** Os parâmetros do vidro da lib (setMiBloomStroke) que o Hyper Eternity aplica nos cartões de notificação. */
+    static volatile float[] bloomCfg;
+    static volatile boolean bloomFromNotif;
+    static Method mBloom;
+    static int bloomLogs;
+
+    static boolean captured;
+
+    /** Chamado logo que o SystemUI abre: os cartões recebem o vidro antes de o relógio existir. */
+    static synchronized void captureEarly() {
+        if (captured) return;
+        captured = true;
+        captureNotif();
+        captureBloom();
+    }
+
+    static void captureBloom() {
+        try {
+            mBloom = View.class.getMethod("setMiBloomStroke", float[].class);
+            XposedBridge.hookMethod(mBloom, new XC_MethodHook() {
+                protected void afterHookedMethod(MethodHookParam p) {
+                    try {
+                        if (!(p.args[0] instanceof float[])) return;
+                        String cn = p.thisObject.getClass().getName();
+                        boolean notif = cn.endsWith("NotificationBackgroundView");
+                        // o cartão de notificação manda; sem ele, qualquer vidro de cartão do bloqueio serve
+                        if (!notif && bloomFromNotif) return;
+                        float[] c = ((float[]) p.args[0]).clone();
+                        boolean any = false;
+                        for (float f : c) if (f != 0f) { any = true; break; }
+                        if (!any) return;
+                        if (c.length > 6) c[6] = 0f;   // altura visível do cartão: não vale para o relógio
+                        if (java.util.Arrays.equals(c, bloomCfg)) return;
+                        bloomCfg = c;
+                        bloomFromNotif = notif;
+                        if (bloomLogs++ < 3) log("vidro da lib lido de " + p.thisObject.getClass().getSimpleName() + " (" + c.length + " parâmetros)");
+                        if (glass()) main.post(new Runnable() {
+                            public void run() {
+                                for (View v : new ArrayList<View>(numbers)) { libGlass(v); v.invalidate(); }
+                            }
+                        });
+                    } catch (Throwable ignored) {}
+                }
+            });
+        } catch (Throwable t) {
+            log("vidro da lib indisponível (sem setMiBloomStroke): " + t);
+        }
+    }
+
+    /**
+     * Vidro da lib nos números: o desfoque do sistema recortado no formato do número (modo de mistura
+     * da view, o mesmo da "mistura") com as cores dos cartões, e o material da lib (setMiBloomStroke,
+     * o shader do módulo "Vidro com refração") com os mesmos parâmetros dos cartões de notificação.
+     */
+    /**
+     * Parâmetros do vidro da lib (o shader do módulo "Vidro com refração"), no mesmo formato que o
+     * Hyper Eternity usa: os valores padrão do material avançado. Se o Hyper Eternity aplicar o vidro
+     * num cartão, os ajustes dele passam a valer aqui também.
+     */
+    static final float[] LIB_DEFAULT = {5.7750006f, 206652.0f, 1.0f, 1.0f, 0.9f, 0.0f, 0.0f, -0.20710677f, 1.4071068f, 32767.0f,
+            9212966.0f, 3352166.0f, 5963904.0f, 3309608.0f, 1.5f, 0.7f, 0.0f, 4937028.0f, 7553152.0f, 8401677.0f, 8010524.0f};
+    static final int TAG_BLOOM_SIZE = 0x7e1a0e34, TAG_BLOOM_L = 0x7e1a0e35, TAG_BLOOM_FAIL = 0x7e1a0e36;
+
+    /**
+     * Vidro da lib direto no número: o desfoque do sistema recortado no formato do número (modo de
+     * mistura da view) e o material avançado (setMiBloomStroke). O sistema guarda o tamanho da view no
+     * momento em que o material é aplicado: com a view ainda sem tamanho (0x0) ele não aparecia; por
+     * isso só aplica com tamanho e reaplica quando o tamanho muda.
+     */
+    static final Object FROST_KEY = new Object();
+
+    static Object notifKey() {
+        ArrayList<Point> l = notifList;
+        return l != null ? l : FROST_KEY;
+    }
+
+    static void libGlass(final View v) {
+        if (!Integer.valueOf(glassColor()).equals(v.getTag(TAG_NOTIF))) notifMaterial(v);
+        float[] c = bloomCfg != null ? bloomCfg : LIB_DEFAULT;
+        if (v.getTag(TAG_BLOOM_L) == null) {
+            View.OnLayoutChangeListener l = new View.OnLayoutChangeListener() {
+                public void onLayoutChange(View x, int l1, int t1, int r1, int b1, int l0, int t0, int r0, int b0) {
+                    if (glass() && (r1 - l1 != r0 - l0 || b1 - t1 != b0 - t0)) libGlass(x);
+                }
+            };
+            v.addOnLayoutChangeListener(l);
+            v.setTag(TAG_BLOOM_L, l);
+        }
+        int w = v.getWidth(), h = v.getHeight();
+        if (true) return;   // o material avançado (bloom) é de retângulo: o vidro do número vem do modo 250
+        if (w <= 0 || h <= 0 || mBloom == null) return;
+        String key = w + "x" + h + java.util.Arrays.toString(c);
+        if (key.equals(v.getTag(TAG_BLOOM_SIZE))) return;
+        try {
+            mBloom.invoke(v, (Object) new float[c.length]);
+            mBloom.invoke(v, (Object) c);
+            v.setTag(TAG_BLOOM_SIZE, key);
+            v.setTag(TAG_BLOOM, c);
+            if (bloomLogs++ < 8) log("vidro da lib aplicado no número " + Glass.name(v) + " (" + w + "x" + h + (c == LIB_DEFAULT ? ", parâmetros padrão" : ", parâmetros do Hyper Eternity") + ")");
+            v.invalidate();
+        } catch (Throwable t) {
+            v.setTag(TAG_BLOOM_FAIL, Boolean.TRUE);
+            if (logs++ < 8) log("vidro da lib no número: " + t);
+        }
+    }
+
+    static void libGlassOff(View v) {
+        try {
+            if (v.getTag(TAG_BLOOM) != null && mBloom != null) mBloom.invoke(v, (Object) new float[21]);
+        } catch (Throwable ignored) {}
+        v.setTag(TAG_BLOOM, null);
+        v.setTag(TAG_BLOOM_SIZE, null);
+        v.setTag(TAG_NOTIF, null);
+    }
+
+    /** O número recebe o desfoque do sistema com as mesmas cores de mistura dos cartões. */
+    /**
+     * Modo de mistura 250: o vidro com refração que o módulo da lib (Vidro com refração v47+) acrescenta
+     * ao shader de mistura do desfoque da Xiaomi — o mesmo que o relógio já usa. Lá dentro ele tem o
+     * fundo desfocado de verdade (papel de parede, HMC) e o desenho do próprio número: acha a borda de
+     * cada número, curva o fundo como uma lente, com desvio de cor e luz. A cor é um véu (branco, 12%).
+     * Sem o módulo novo, o sistema trata o 250 como uma mistura simples (fica fosco).
+     */
+    static final int GLASS_MODE = 250;
+
+    /**
+     * Os parâmetros do vidro do número vão na cor da mistura (o shader do módulo lê cada canal):
+     * vermelho = largura da lente (px x2), verde = espessura (quanto desloca o fundo), azul = luz.
+     * Vêm dos controles do material avançado do Hyper Eternity (largura da lente, espessura, luz
+     * principal), lidos quando ele aplica o vidro em algo do SystemUI; sem isso, valores padrão.
+     */
+    static final Paint px = new Paint();
+    static final android.graphics.RectF pr = new android.graphics.RectF();
+    static int pxLogs;
+
+    /**
+     * Os parâmetros do vidro (os mesmos 21 números que o Hyper Eternity manda para o shader do material
+     * avançado) seguem para o shader do número por uma linha de pixels no canto do próprio desenho do
+     * número: o shader de mistura lê o desenho da view, então lê também esses pixels (e não os mostra).
+     * Assim o relógio usa exatamente o mesmo vidro e os mesmos ajustes das notificações, plugin e launcher.
+     */
+    static String rcRaw;
+    static int[] rcVal;
+
+    /** Ajustes próprios do vidro do relógio, publicados pelo Hyper Eternity (mesmo processo). null = desligados. */
+    static int[] rc() {
+        String s = System.getProperty("hyper.eternity.relogio.vidro");
+        if (s == null) return null;
+        if (!s.equals(rcRaw)) {
+            rcRaw = s;
+            try {
+                String[] a = s.split(",");
+                int[] v = new int[a.length];
+                for (int i = 0; i < a.length; i++) v[i] = Integer.parseInt(a[i].trim());
+                rcVal = v.length >= 11 ? v : null;
+            } catch (Throwable t) {
+                rcVal = null;
+            }
+        }
+        return rcVal != null && rcVal[0] == 1 ? rcVal : null;
+    }
+
+    static boolean rcListening;
+    static String rcDone;
+    static final Runnable rcRedo = new Runnable() {
+        public void run() {
+            if (!glass()) return;
+            for (View n : new ArrayList<View>(numbers)) n.invalidate();
+            // o desfoque só muda remontando o relógio
+            rc();
+            String k = rcRaw;
+            if (k != null && !k.equals(rcDone)) {
+                rcDone = k;
+                Clocks.rebuildAll("ajuste do vidro do relógio");
+            }
+        }
+    };
+
+    /** O app do Hyper Eternity avisa quando um ajuste do material muda: redesenha os números. */
+    static void rcListen(Context ctx) {
+        if (rcListening) return;
+        rcListening = true;
+        try {
+            android.content.BroadcastReceiver r = new android.content.BroadcastReceiver() {
+                public void onReceive(Context c, android.content.Intent i) {
+                    main.removeCallbacks(rcRedo);
+                    main.postDelayed(rcRedo, 500);
+                }
+            };
+            android.content.IntentFilter f = new android.content.IntentFilter("com.ilha.headsup.MATERIAL");
+            ctx.getApplicationContext().registerReceiver(r, f, Context.RECEIVER_EXPORTED);
+        } catch (Throwable t) {
+            log("aviso dos ajustes do vidro: " + t);
+        }
+    }
+
+    static void params(View v, Canvas c) {
+        rcListen(v.getContext());
+        int[] own = rc();
+        if (own != null) {
+            // refr, edge, light, veil, tint, r, g, b, stroke, blur
+            int[] rgbo = {
+                    rgbOf(231, 17, 90),
+                    rgbOf(b8(own[1]), b8(own[3]), b8(own[4] * 2.55f)),
+                    rgbOf(b8(own[6]), b8(own[7]), b8(own[8])),
+                    rgbOf(b8(own[5] * 2.55f), b8(own[9] * 2.55f), b8(own[2]))};
+            drawPx(c, rgbo);
+            if (pxLogs++ < 2) log("vidro do relógio: ajustes próprios " + rcRaw);
+            return;
+        }
+        float[] cfg = bloomCfg != null ? bloomCfg : LIB_DEFAULT;
+        // do material avançado do Hyper Eternity: espessura (refração), luz principal, véu, cor própria
+        // do vidro (cor e força), contorno e largura da lente
+        int p13 = (int) cfg[13], p18 = (int) cfg[18], p19 = (int) cfg[19];
+        float edge = (p13 >> 16) & 255;
+        float thick = (p13 & 255) * 510f / 255f;
+        float li = ((p18 >> 16) & 255) * 400f / 255f;
+        float ta = (p19 & 255) * 200f / 255f;
+        int tz = Math.round(cfg[9]);
+        int tr = (tz >> 10) & 31, tg = (tz >> 5) & 31, tb = tz & 31;
+        int[] rgb = {
+                rgbOf(231, 17, 90),
+                rgbOf(b8(thick * 0.45f), b8(li), b8((1f - cfg[2]) * 255)),
+                rgbOf(tr * 255 / 31, tg * 255 / 31, tb * 255 / 31),
+                rgbOf(b8(ta / 200f * 255 * 0.5f), b8(cfg[5] * 255), b8(Math.max(8f, edge * 0.4f)))};
+        drawPx(c, rgb);
+        if (pxLogs++ < 2) log("vidro da lib: refração " + Math.round(thick * 0.45f) + "px, luz " + Math.round(li) + "%, cor " + Integer.toHexString(rgb[2]) + " " + Math.round(ta) + "%, contorno " + Math.round(cfg[5] * 100) + "% (" + (cfg == LIB_DEFAULT ? "padrão" : "do Hyper Eternity") + ")");
+    }
+
+    static void drawPx(Canvas c, int[] rgb) {
+        int sv = c.save();
+        c.setMatrix(null);
+        px.setAntiAlias(false);
+        for (int i = 0; i < rgb.length; i++) {
+            px.setColor(rgb[i]);
+            pr.set(i, 0, i + 1, 1);
+            c.drawRect(pr, px);
+        }
+        c.restoreToCount(sv);
+    }
+
+    static int rgbOf(int r, int g, int b) { return 0xff000000 | (r << 16) | (g << 8) | b; }
+
+    static int b8(float f) { return Math.max(0, Math.min(255, Math.round(f))); }
+
+    static int glassColor() {
+        int r = 56, g = 60, b = 102;
+        float[] c = bloomCfg;
+        try {
+            if (c != null && c.length >= 21 && c[20] == 8010524f) {
+                int p13 = (int) c[13], p18 = (int) c[18];
+                float edge = (p13 >> 16) & 255;                 // largura da lente, 0..255 px
+                float thick = (p13 & 255) * 510f / 255f;         // espessura, 0..510 px
+                float li = ((p18 >> 16) & 255) * 400f / 255f;    // luz principal, 0..400 %
+                r = Math.round(edge * 0.8f);
+                g = Math.round(thick * 0.75f);
+                b = Math.round(li * 0.729f);
+            }
+        } catch (Throwable ignored) {}
+        r = Math.max(12, Math.min(255, r));
+        g = Math.max(0, Math.min(255, g));
+        b = Math.max(0, Math.min(255, b));
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
+    }
+
+    static boolean applying, guardOn;
+    static int guardLogs;
+
+    /**
+     * Com o papel de parede com profundidade, o relógio do HOS4 troca o material da camada das horas
+     * (desliga a mistura) depois que aplicamos o vidro: as horas ficavam brancas lisas. Com o vidro
+     * ligado, só nós mexemos na mistura dos números.
+     */
+    static void guard() {
+        if (guardOn) return;
+        guardOn = true;
+        XC_MethodHook h = new XC_MethodHook() {
+            protected void beforeHookedMethod(MethodHookParam p) {
+                if (applying || !glass() || tvCls == null || !tvCls.isInstance(p.thisObject)) return;
+                p.setResult(null);
+                if (guardLogs++ < 4) log("vidro: o relógio tentou trocar a mistura de " + Glass.name((View) p.thisObject) + " (" + p.method.getName() + "), mantido o vidro");
+            }
+        };
+        for (Method m : View.class.getDeclaredMethods()) {
+            String n = m.getName();
+            if (n.equals("setMiViewBlurMode") || n.equals("setMiBackgroundBlendColors") || n.equals("clearMiBackgroundBlendColor")
+                    || n.equals("addMiBackgroundBlendColor")) {
+                try { XposedBridge.hookMethod(m, h); } catch (Throwable ignored) {}
+            }
+        }
+    }
+
+    static void notifMaterial(View v) {
+        guard();
+        applying = true;
+        try {
+            notifMaterial0(v);
+        } finally {
+            applying = false;
+        }
+    }
+
+    static void notifMaterial0(View v) {
+        try {
+            if (mBlurMode != null && mBlendColors != null) {
+                int col = glassColor();
+                ArrayList<Point> g = new ArrayList<Point>();
+                g.add(new Point(col, GLASS_MODE));
+                mBlurMode.invoke(v, 3);
+                mBlendColors.invoke(v, g);
+                v.setTag(TAG_NOTIF, Integer.valueOf(col));
+                if (notifLogs++ < 6) log("vidro da lib (modo " + GLASS_MODE + ", lente " + ((col >> 16) & 255) / 2 + "px, espessura " + ((col >> 8) & 255) + ", luz " + (col & 255) + ") no número " + Glass.name(v));
+                v.invalidate();
+                return;
+            }
+            ArrayList<Point> l = notifList;
+            if (l == null || mBlurMode == null || mBlendColors == null) {
+                // ainda sem a lista (nenhum cartão apareceu): o fosco do relógio, que é o mesmo motor
+                Glass.frost(v);
+                v.setTag(TAG_NOTIF, FROST_KEY);
+            } else {
+                mBlurMode.invoke(v, 3);
+                mBlendColors.invoke(v, new ArrayList<Point>(l));
+                v.setTag(TAG_NOTIF, l);
+            }
+            v.invalidate();
+        } catch (Throwable t) {
+            if (logs++ < 8) log("material das notificações no número: " + t);
+        }
     }
 
     // ------------------------------------------------------------------ mistura com o fundo
@@ -306,6 +709,7 @@ final class Fx {
                     d.setColorFilter(null);
                     pickDuo(b);
                     poster = duotone(b, duoA);
+                    LiquidGlass.prepare(b);
                     wall = b;
                     log("papel de parede " + dw + "x" + dh + " carregado; cores " + Integer.toHexString(duoA) + " / " + Integer.toHexString(duoB));
                     main.post(new Runnable() {

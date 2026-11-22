@@ -8,7 +8,7 @@ public final class Keys {
     public static final String FILE = "ajustes";
     /** Grupo das preferências remotas do LSPosed. */
     public static final String GROUP = "relogios";
-    public static final String VERSION = "1.4";
+    public static final String VERSION = "1.6";
 
     /** Editor do bloqueio oferece os modelos do HyperOS 4 (All in One). */
     public static final String EDITOR = "editor";
@@ -28,8 +28,9 @@ public final class Keys {
 
     /** Balanço do papel de parede no bloqueio: liga, área (0 imagem inteira, 1 pintada), força (10–100) e a área pintada (grade 36x80 em base64). */
     public static final String WOB = "wob", WOB_AREA = "wob_area", WOB_FORCE = "wob_force", WOB_MASK = "wob_mask";
+    public static final String GLOW = "glow", GLOW_FORCE = "glow_force", GLOW_AREA = "glow_area", SUBJ_MASK = "subj_mask";
 
-    public static final String[] ALL = {EDITOR, LOCK, CURTAIN, FOLLOW, FROST, WOB};
+    public static final String[] ALL = {EDITOR, LOCK, CURTAIN, FOLLOW, FROST, WOB, GLOW};
 
     /** Última opção ligada e quando (para a proteção contra quedas em sequência). */
     public static final String SAFE_LAST = "safe_last", SAFE_AT = "safe_at";

@@ -28,11 +28,8 @@ public class Entry extends XposedModule {
             String proc = android.app.Application.getProcessName();
             if (!"com.miui.aod".equals(pk) && !"com.android.systemui".equals(pk)) return;
             // trava: no HyperOS 4 tudo isto já é nativo; mexer só traria conflito
-            if (Hos.isHos4()) {
-                if ("com.android.systemui".equals(pk) && (proc == null || proc.equals(pk)))
-                    XposedBridge.log("[Relógios HOS4] HyperOS 4 detectado (" + Hos.why + "): extensão parada, nada é alterado");
-                return;
-            }
+            if (Hos.isHos4() && "com.android.systemui".equals(pk) && (proc == null || proc.equals(pk)))
+                XposedBridge.log("[Relógios HOS4] HyperOS 4 detectado (" + Hos.why + "): a extensão continua ativa (sem trava)");
             if ("com.miui.aod".equals(pk)) {
                 if (proc == null || !(proc.equals(pk) || proc.equals(pk + ":keyguardeditor"))) return;
                 Cfg.loadNow();   // o editor decide os modelos na abertura: os ajustes precisam estar aqui antes

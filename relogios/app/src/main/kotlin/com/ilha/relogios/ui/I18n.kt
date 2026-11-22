@@ -97,6 +97,7 @@ object I18n {
         "Separação RGB" to "RGB split",
         "Pôster (foto em duas tintas e granulado)" to "Poster (two-tone photo with grain)",
         "Rastro (rastro colorido atrás dos números)" to "Trail (colored trail behind the digits)",
+        "Vidro líquido (reflexo e refração)" to "Liquid glass (reflection and refraction)",
         "A do editor" to "The editor's",
         "Sobrepor" to "Overlay",
         "Luz suave" to "Soft light",

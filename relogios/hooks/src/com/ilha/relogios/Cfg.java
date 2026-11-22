@@ -9,7 +9,9 @@ final class Cfg {
 
     static volatile boolean editor, lock, curtain, follow, frost, loaded;
     static volatile int fx, fxBlend, wobArea, wobForce;
-    static volatile boolean wob;
+    static volatile boolean wob, glow;
+    static volatile int glowForce = 50, glowArea;
+    static volatile String subjMask = "";
     static volatile String wobMask = "";
     private static volatile SharedPreferences prefs;
     private static final java.util.ArrayList<Runnable> watchers = new java.util.ArrayList<Runnable>();
@@ -61,6 +63,10 @@ final class Cfg {
             wobArea = p.getInt(Keys.WOB_AREA, 0);
             wobForce = p.getInt(Keys.WOB_FORCE, 50);
             wobMask = p.getString(Keys.WOB_MASK, "");
+            glow = Safe.apply(Keys.GLOW, p.getBoolean(Keys.GLOW, false));
+            glowForce = p.getInt(Keys.GLOW_FORCE, 50);
+            glowArea = p.getInt(Keys.GLOW_AREA, 0);
+            subjMask = p.getString(Keys.SUBJ_MASK, "");
         } catch (Throwable ignored) {
         }
         try {

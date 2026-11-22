@@ -74,7 +74,7 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 private const val AOD = "com.miui.aod"
 
-private val FxNames = listOf("Nenhum", "Papel de parede nos números", "Duas cores do papel de parede", "Holográfico (mexe ao inclinar)", "Granulado", "Separação RGB", "Pôster (foto em duas tintas e granulado)", "Rastro (rastro colorido atrás dos números)")
+private val FxNames = listOf("Nenhum", "Papel de parede nos números", "Duas cores do papel de parede", "Holográfico (mexe ao inclinar)", "Granulado", "Separação RGB", "Pôster (foto em duas tintas e granulado)", "Rastro (rastro colorido atrás dos números)", "Vidro líquido (reflexo e refração)")
 private val BlendModes = listOf(0, 15, 21, 14, 18, 24, 22, 23, 12, 28)
 private val BlendNames = listOf("A do editor", "Sobrepor", "Luz suave", "Tela", "Subexposição de cor", "Multiplicar", "Diferença", "Exclusão", "Adicionar", "Luminosidade")
 private const val MAIN = "com.ilha.headsup"

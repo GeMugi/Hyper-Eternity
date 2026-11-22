@@ -79,6 +79,8 @@ final class Clocks {
                 }
             });
             bridges();
+            Aod.plugin();
+            Fx.captureEarly();
             log("bloqueio preparado");
         } catch (Throwable t) {
             log("não instalado: " + t);
@@ -107,6 +109,7 @@ final class Clocks {
         View mine = (View) g.getTag(TAG);
         if (!want) {
             if (mine != null) {
+                dropFront(mine);
                 g.removeView(mine);
                 g.setTag(TAG, null);
                 for (int i = 0; i < g.getChildCount(); i++) g.getChildAt(i).setVisibility(View.VISIBLE);
@@ -125,20 +128,246 @@ final class Clocks {
                 log("modelo " + tid + " (" + why + "): relógio do HOS4 montado");
             }
             // o relógio do HOS3 fica escondido por baixo (o bloqueio continua usando ele para posições)
-            for (int i = 0; i < g.getChildCount(); i++) {
-                View c = g.getChildAt(i);
-                if (c != mine && c.getVisibility() == View.VISIBLE) c.setVisibility(View.INVISIBLE);
-            }
+            hideOthers(g, mine);
+            guard(g);
         } catch (Throwable t) {
             log("falha ao montar: " + t + " em " + stack(t));
         }
     }
 
+    static void hideOthers(ViewGroup g, View mine) {
+        for (int i = 0; i < g.getChildCount(); i++) {
+            View c = g.getChildAt(i);
+            if (c != mine && c.getVisibility() == View.VISIBLE) c.setVisibility(View.INVISIBLE);
+        }
+    }
+
+    static final int TAG_GUARD = 0x7e1a0e02;
+    static int aodLogs;
+    static boolean screenRcv;
+
+    /**
+     * Tela sempre ativa (AOD), como no HyperOS 4: quem desenha o relógio no AOD é o app da tela
+     * sempre ativa (com.miui.aod), que já monta o modelo All in One sozinho, com as notificações do
+     * AOD no lugar certo. O relógio que a extensão põe no bloqueio fica escondido enquanto a tela
+     * está no AOD (antes ficavam os dois, um por cima do outro); o do HyperOS 3 fica sempre escondido.
+     */
+    static void guard(final ViewGroup g) {
+        if (g.getTag(TAG_GUARD) != null) return;
+        g.setTag(TAG_GUARD, Boolean.TRUE);
+        g.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            public boolean onPreDraw() {
+                try {
+                    View mine = (View) g.getTag(TAG);
+                    if (mine == null) return true;
+                    hideOthers(g, mine);
+                    aodState(mine, aodNow(g));
+                    depthLayer(g, mine);
+                } catch (Throwable ignored) {
+                }
+                return true;
+            }
+        });
+        if (!screenRcv) {
+            screenRcv = true;
+            try {
+                android.content.IntentFilter f = new android.content.IntentFilter();
+                f.addAction(android.content.Intent.ACTION_SCREEN_OFF);
+                f.addAction(android.content.Intent.ACTION_SCREEN_ON);
+                f.addAction(android.content.Intent.ACTION_USER_PRESENT);
+                g.getContext().getApplicationContext().registerReceiver(new android.content.BroadcastReceiver() {
+                    public void onReceive(Context c, android.content.Intent i) {
+                        boolean off = android.content.Intent.ACTION_SCREEN_OFF.equals(i.getAction());
+                        for (ViewGroup x : containers.keySet()) {
+                            View mine = (View) x.getTag(TAG);
+                            if (mine != null) aodState(mine, off);
+                        }
+                    }
+                }, f);
+            } catch (Throwable t) {
+                log("AOD: sem aviso de tela " + t);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ profundidade (recorte do papel de parede)
+
+    static final int TAG_FRONT = 0x7e1a0e09;
+    static Field fSec;
+    static Method mDepth;
+    static int depthLogs;
+    static final int[] la = new int[2], lb = new int[2];
+
+    /**
+     * Papel de parede com profundidade: no HyperOS o relógio é dividido em duas camadas — uma atrás do
+     * recorte (a pessoa) e outra na frente. O bloqueio do HOS3 tem o lugar da camada da frente
+     * (mKeyguardSecondaryClockContainer, numa camada acima do recorte); o KeyguardClockContainer fica
+     * atrás. Com profundidade, as horas vão para a camada da frente (numa caixa alinhada à nossa) e os
+     * minutos ficam atrás, como no HyperOS 4.
+     */
+    static void depthLayer(ViewGroup g, View box) {
+        try {
+            if (!(box instanceof FrameLayout)) return;
+            FrameLayout b = (FrameLayout) box;
+            View hour = (View) b.getTag(TAG_HOUR);
+            if (hour == null) return;
+            if (fSec == null) {
+                fSec = g.getClass().getDeclaredField("mKeyguardSecondaryClockContainer");
+                fSec.setAccessible(true);
+            }
+            FrameLayout sec = (FrameLayout) fSec.get(g);
+            long now = android.os.SystemClock.uptimeMillis();
+            Object last = b.getTag(TAG_FRONT + 1);
+            if (!(last instanceof long[]) || now - ((long[]) last)[0] > 1000) {
+                b.setTag(TAG_FRONT + 1, new long[]{now, depthOn(g) ? 1 : 0});
+                last = b.getTag(TAG_FRONT + 1);
+            }
+            boolean depth = sec != null && ((long[]) last)[1] == 1;
+            FrameLayout front = (FrameLayout) b.getTag(TAG_FRONT);
+            if (depth) {
+                if (front == null || front.getParent() != sec) {
+                    if (front != null && front.getParent() instanceof ViewGroup) ((ViewGroup) front.getParent()).removeView(front);
+                    front = new Sealed(b.getContext());
+                    sec.addView(front, new FrameLayout.LayoutParams(b.getWidth() > 0 ? b.getWidth() : -1, b.getHeight() > 0 ? b.getHeight() : -1));
+                    b.setTag(TAG_FRONT, front);
+                }
+                if (hour.getParent() != front) {
+                    ((ViewGroup) hour.getParent()).removeView(hour);
+                    front.addView(hour, new FrameLayout.LayoutParams(-1, -1));
+                    if (depthLogs++ < 4) log("profundidade: horas na camada da frente, minutos atrás do recorte");
+                }
+                // sem filhos do HOS3 na camada da frente (só a nossa caixa)
+                for (int i = 0; i < sec.getChildCount(); i++) {
+                    View c = sec.getChildAt(i);
+                    if (c != front && c.getVisibility() == View.VISIBLE) c.setVisibility(View.INVISIBLE);
+                }
+                if (sec.getVisibility() != View.VISIBLE && g.getVisibility() == View.VISIBLE) sec.setVisibility(View.VISIBLE);
+                // alinhada à caixa: tamanho, posição na tela, visibilidade e transparência
+                FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) front.getLayoutParams();
+                if (b.getWidth() > 0 && (lp.width != b.getWidth() || lp.height != b.getHeight())) {
+                    lp.width = b.getWidth();
+                    lp.height = b.getHeight();
+                    front.setLayoutParams(lp);
+                }
+                b.getLocationOnScreen(la);
+                sec.getLocationOnScreen(lb);
+                float tx = la[0] - lb[0] - front.getLeft();
+                float ty = la[1] - lb[1] - front.getTop();
+                if (front.getTranslationX() != tx) front.setTranslationX(tx);
+                if (front.getTranslationY() != ty) front.setTranslationY(ty);
+                front.setScaleX(b.getScaleX());
+                front.setScaleY(b.getScaleY());
+                float a = 1f;
+                for (android.view.ViewParent pp = b; pp instanceof View && pp != g.getParent(); pp = pp.getParent()) a *= ((View) pp).getAlpha();
+                if (front.getAlpha() != a) front.setAlpha(a);
+                int vis = b.isShown() ? View.VISIBLE : View.INVISIBLE;
+                if (front.getVisibility() != vis) front.setVisibility(vis);
+            } else if (front != null) {
+                if (hour.getParent() == front) {
+                    front.removeView(hour);
+                    b.addView(hour, 0, new FrameLayout.LayoutParams(-1, -1));
+                    if (depthLogs++ < 4) log("profundidade desligada: horas de volta à caixa");
+                }
+                if (front.getParent() instanceof ViewGroup) ((ViewGroup) front.getParent()).removeView(front);
+                b.setTag(TAG_FRONT, null);
+            }
+        } catch (Throwable t) {
+            if (depthLogs++ < 4) log("profundidade: " + t);
+        }
+    }
+
+    /** A caixa vai sair: a camada da frente (com as horas) sai junto. */
+    static void dropFront(View box) {
+        try {
+            Object f = box.getTag(TAG_FRONT);
+            if (f instanceof View && ((View) f).getParent() instanceof ViewGroup) ((ViewGroup) ((View) f).getParent()).removeView((View) f);
+            box.setTag(TAG_FRONT, null);
+        } catch (Throwable ignored) {}
+    }
+
+    static boolean depthOn(ViewGroup g) {
+        try {
+            Object ctl = fCtl.get(g);
+            if (ctl == null) return false;
+            if (mDepth == null) {
+                mDepth = ctl.getClass().getMethod("isWallpaperSupportDepth");
+                mDepth.setAccessible(true);
+            }
+            return Boolean.TRUE.equals(mDepth.invoke(ctl));
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    static void aodState(View mine, boolean aod) {
+        int vis = aod ? View.INVISIBLE : View.VISIBLE;
+        if (mine.getVisibility() == vis) return;
+        mine.setVisibility(vis);
+        if (mine.getScaleX() != 1f) { mine.setScaleX(1f); mine.setScaleY(1f); }
+        if (aodLogs++ < 8) log("AOD: relógio da extensão " + (aod ? "escondido (o AOD desenha o dele)" : "de volta no bloqueio"));
+    }
+
+    /** A tela está no AOD (sempre ativa): não interativa, com o bloqueio desenhando. */
+    static boolean aodNow(View v) {
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager) v.getContext().getSystemService(Context.POWER_SERVICE);
+            return pm != null && !pm.isInteractive();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     /** Monta de novo os relógios do bloqueio (para um efeito novo valer desde o começo). */
+    static String lastClockInfo;
+    static boolean editorWatch;
+
+    /**
+     * O editor salva o modelo em constant_template_editor_info. O relógio do HOS3 só recebe o que
+     * conhece (o modelo), não a fonte nem o estilo do All in One: o nosso ficava com a fonte antiga até
+     * reiniciar o SystemUI. Mudou o relógio no editor (clockInfo): o relógio do HOS4 é remontado.
+     */
+    static void watchEditor(final Context ctx) {
+        if (editorWatch) return;
+        editorWatch = true;
+        try {
+            final android.content.ContentResolver cr = ctx.getContentResolver();
+            lastClockInfo = clockInfo(cr);
+            cr.registerContentObserver(android.provider.Settings.Secure.getUriFor("constant_template_editor_info"), false,
+                    new android.database.ContentObserver(new android.os.Handler(android.os.Looper.getMainLooper())) {
+                        public void onChange(boolean self) {
+                            String now = clockInfo(cr);
+                            if (now == null || now.equals(lastClockInfo)) return;
+                            lastClockInfo = now;
+                            Fx.main.removeCallbacks(rebuildEditor);
+                            Fx.main.postDelayed(rebuildEditor, 400);
+                        }
+                    });
+        } catch (Throwable t) {
+            log("editor: " + t);
+        }
+    }
+
+    static final Runnable rebuildEditor = new Runnable() {
+        public void run() { rebuildAll("relógio mudou no editor"); }
+    };
+
+    static String clockInfo(android.content.ContentResolver cr) {
+        try {
+            String j = android.provider.Settings.Secure.getString(cr, "constant_template_editor_info");
+            if (j == null) return null;
+            org.json.JSONObject o = new org.json.JSONObject(j).optJSONObject("lockscreenInfo");
+            Object ci = o == null ? null : o.opt("clockInfo");
+            return ci == null ? null : ci.toString();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     static void rebuildAll(String why) {
         for (ViewGroup g : new java.util.ArrayList<ViewGroup>(containers.keySet())) {
             View mine = (View) g.getTag(TAG);
             if (mine == null) continue;
+            dropFront(mine);
             g.removeView(mine);
             g.setTag(TAG, null);
             check(g, why);
@@ -188,6 +417,7 @@ final class Clocks {
                 log("nível do aparelho: " + t);
             }
         }
+        watchEditor(sys.getApplicationContext() != null ? sys.getApplicationContext() : sys);
         Context cx = sysCtx(aod);
         final View hour = (View) clockViewCls.getConstructor(Context.class).newInstance(cx);
         // sem modelo: o próprio controlador do HOS4 lê o modelo escolhido nas configurações
