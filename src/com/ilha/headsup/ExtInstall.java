@@ -155,7 +155,7 @@ final class ExtInstall {
         return newer(list[0], fixed[0]) ? list : fixed;
     }
 
-    static String[] best(JSONObject r, String[] best) {
+    static String[] best(JSONObject r, String[] best) throws Exception {
         if (r.optBoolean("draft")) return best;
         JSONArray assets = r.optJSONArray("assets");
         if (assets == null) return best;
