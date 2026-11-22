@@ -28,6 +28,8 @@ final class ExtInstall {
 
     static final String PKG = "com.ilha.headsup.relogios";
     static final String API = "https://api.github.com/repos/GeMugi/hyper-eternity/releases?per_page=15";
+    /** Release fixa da extensão: o APK dentro dela é trocado a cada versão, sem release nova. */
+    static final String API_FIXED = "https://api.github.com/repos/GeMugi/hyper-eternity/releases/tags/relogios";
     static final String PREFIX = "Hyper-Eternity-Relogios-";
     static final String ACTION = Keys.PKG + ".EXT_INSTALL";
 
@@ -135,8 +137,56 @@ final class ExtInstall {
         }, "baixar-relogios").start();
     }
 
-    /** {versão, url, tamanho} da extensão mais nova publicada. */
+    /** {versão, url, tamanho} da extensão mais nova publicada: a release fixa "relogios" e as últimas releases. */
     static String[] find() throws Exception {
+        String[] fixed = null;
+        try {
+            fixed = findFixed();
+        } catch (Throwable ignored) {
+        }
+        String[] list = null;
+        try {
+            list = findList();
+        } catch (Throwable t) {
+            if (fixed == null) throw t instanceof Exception ? (Exception) t : new Exception(t);
+        }
+        if (fixed == null) return list;
+        if (list == null) return fixed;
+        return newer(list[0], fixed[0]) ? list : fixed;
+    }
+
+    static String[] best(JSONObject r, String[] best) {
+        if (r.optBoolean("draft")) return best;
+        JSONArray assets = r.optJSONArray("assets");
+        if (assets == null) return best;
+        for (int j = 0; j < assets.length(); j++) {
+            JSONObject a = assets.getJSONObject(j);
+            String name = a.optString("name");
+            if (isExt(name)) {
+                String base = name.substring(0, name.length() - 4);
+                String ver = base.substring(base.lastIndexOf('-') + 1);
+                if (best == null || newer(ver, best[0]))
+                    best = new String[]{ver, a.optString("browser_download_url"), String.valueOf(a.optLong("size"))};
+            }
+        }
+        return best;
+    }
+
+    static String[] findFixed() throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(API_FIXED).openConnection();
+        c.setConnectTimeout(15000);
+        c.setReadTimeout(20000);
+        c.setRequestProperty("Accept", "application/vnd.github+json");
+        c.setRequestProperty("User-Agent", "Hyper-Eternity");
+        try {
+            if (c.getResponseCode() != 200) return null;
+            return best(new JSONObject(readAll(c.getInputStream())), null);
+        } finally {
+            c.disconnect();
+        }
+    }
+
+    static String[] findList() throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(API).openConnection();
         c.setConnectTimeout(15000);
         c.setReadTimeout(20000);
@@ -147,22 +197,7 @@ final class ExtInstall {
             JSONArray arr = new JSONArray(readAll(c.getInputStream()));
             // a ordem da lista do GitHub não é confiável (releases do mesmo commit empatam): fica a maior versão
             String[] best = null;
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject r = arr.getJSONObject(i);
-                if (r.optBoolean("draft")) continue;
-                JSONArray assets = r.optJSONArray("assets");
-                if (assets == null) continue;
-                for (int j = 0; j < assets.length(); j++) {
-                    JSONObject a = assets.getJSONObject(j);
-                    String name = a.optString("name");
-                    if (isExt(name)) {
-                        String base = name.substring(0, name.length() - 4);
-                        String ver = base.substring(base.lastIndexOf('-') + 1);
-                        if (best == null || newer(ver, best[0]))
-                            best = new String[]{ver, a.optString("browser_download_url"), String.valueOf(a.optLong("size"))};
-                    }
-                }
-            }
+            for (int i = 0; i < arr.length(); i++) best = best(arr.getJSONObject(i), best);
             return best;
         } finally {
             c.disconnect();
