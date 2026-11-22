@@ -60,7 +60,12 @@ final class Safe {
                 long t = parse(s);
                 if (t > 0 && now - t < WINDOW) starts.add(Long.valueOf(t));
             }
-            starts.add(Long.valueOf(now));
+            // só conta se a partida anterior terminou em erro (queda, queda nativa, ANR): reiniciar o
+            // SystemUI de propósito (pelo app, killall) não é queda e não deve desligar nada
+            int why = lastExit();
+            boolean crashed = why < 0 || why == 4 || why == 5 || why == 6 || why == 7;
+            if (crashed) starts.add(Long.valueOf(now));
+            else log("segurança: a partida anterior não foi uma queda (motivo " + why + "), não conta");
             if (starts.size() >= 3 && last.length() > 0 && now - lastAt < RECENT) {
                 off.add(last);
                 boolean feature = last.startsWith("f:");
@@ -76,6 +81,30 @@ final class Safe {
             save(p);
         } catch (Throwable t) {
             log("segurança: registro indisponível " + t);
+        }
+    }
+
+    /**
+     * Motivo do fim do processo anterior do SystemUI (ApplicationExitInfo.getReason), ou -1 se não
+     * der para saber. 4 = queda, 5 = queda nativa, 6 = ANR, 7 = falha ao iniciar, 10 = pedido do usuário…
+     */
+    static int lastExit() {
+        try {
+            Class<?> at = Class.forName("android.app.ActivityThread");
+            Object thread = at.getMethod("currentActivityThread").invoke(null);
+            Context c = (Context) at.getMethod("getSystemContext").invoke(thread);
+            if (c == null) return -1;
+            android.app.ActivityManager am = (android.app.ActivityManager) c.getSystemService(Context.ACTIVITY_SERVICE);
+            java.util.List<android.app.ApplicationExitInfo> l = am.getHistoricalProcessExitReasons("com.android.systemui", 0, 5);
+            int me = android.os.Process.myPid();
+            for (android.app.ApplicationExitInfo e : l) {
+                if (e.getPid() == me) continue;
+                if (!"com.android.systemui".equals(e.getProcessName())) continue;
+                return e.getReason();
+            }
+            return -1;
+        } catch (Throwable t) {
+            return -1;
         }
     }
 
