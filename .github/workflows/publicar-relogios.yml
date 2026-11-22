@@ -7,7 +7,7 @@ name: Publicar extensão Relógios
 on:
   push:
     branches: [relogios]
-    paths: ['dist/**', '.github/workflows/publicar-relogios.yml']
+    paths: ['dist/**', 'dist-teste/**', '.github/workflows/publicar-relogios.yml']
   workflow_dispatch:
 
 permissions:
@@ -24,8 +24,8 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -e
-          APK=$(ls dist/Hyper-Eternity-Relogios-*.apk | sort -V | tail -n 1)
-          [ -n "$APK" ] || { echo "nenhum APK em dist/"; exit 1; }
+          APK=$(ls dist/Hyper-Eternity-Relogios-*.apk 2>/dev/null | sort -V | tail -n 1)
+          [ -n "$APK" ] || { echo "nenhum APK em dist/"; exit 0; }
           NAME=$(basename "$APK")
           VER=${NAME#Hyper-Eternity-Relogios-}; VER=${VER%.apk}
           if ! gh release view relogios -R "$REPO" >/dev/null 2>&1; then
@@ -40,3 +40,25 @@ jobs:
           gh release upload relogios "$APK" -R "$REPO" --clobber
           gh release edit relogios -R "$REPO" --title "Hyper Eternity Relógios $VER (versão mais nova)"
           echo "publicado: $NAME"
+      - name: Publicar na release relogios-teste
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -e
+          APK=$(ls dist-teste/Hyper-Eternity-Relogios-*.apk 2>/dev/null | sort -V | tail -n 1)
+          [ -n "$APK" ] || { echo "nenhum APK em dist-teste/"; exit 0; }
+          NAME=$(basename "$APK")
+          VER=${NAME#Hyper-Eternity-Relogios-}; VER=${VER%.apk}
+          if ! gh release view relogios-teste -R "$REPO" >/dev/null 2>&1; then
+            gh release create relogios-teste -R "$REPO" --target "$GITHUB_SHA" --prerelease \
+              --title "Hyper Eternity Relógios (teste)" \
+              --notes "Versão de teste da extensão Hyper Eternity Relógios, para testadores. O app do Hyper Eternity não oferece esta versão: baixe o APK daqui. Assinatura de teste: desinstale a versão publicada antes de instalar."
+          fi
+          # só fica o APK mais novo
+          for A in $(gh release view relogios-teste -R "$REPO" --json assets --jq '.assets[].name'); do
+            case "$A" in Hyper-Eternity-Relogios-*.apk) [ "$A" = "$NAME" ] || gh release delete-asset relogios-teste "$A" -R "$REPO" -y ;; esac
+          done
+          gh release upload relogios-teste "$APK" -R "$REPO" --clobber
+          gh release edit relogios-teste -R "$REPO" --title "Hyper Eternity Relógios $VER (teste)"
+          echo "publicado (teste): $NAME"
