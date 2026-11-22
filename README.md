@@ -9,4 +9,4 @@ O app do Hyper Eternity (botão de instalar/atualizar a extensão) procura nesta
 
 ## Testes
 
-APKs de teste vão em `dist-teste/` (mesmo nome, por exemplo `Hyper-Eternity-Relogios-1.7-teste26.apk`) e são publicados na pré-release `relogios-teste`. O app do Hyper Eternity **não** oferece essa versão; os testadores baixam o APK direto da release. A assinatura é de teste: é preciso desinstalar a versão publicada antes.
+APKs de teste vão em `dist-teste/` com o nome `Hyper-Eternity-Clocks-Teste-<n>.apk` (sem "Relogios" no nome, para o app não oferecer o teste a todo mundo) e são publicados na pré-release `relogios-teste`. O app do Hyper Eternity **não** oferece essa versão; os testadores baixam o APK direto da release. A assinatura é de teste: é preciso desinstalar a versão publicada antes.

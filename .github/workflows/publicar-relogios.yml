@@ -46,10 +46,10 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -e
-          APK=$(ls dist-teste/Hyper-Eternity-Relogios-*.apk 2>/dev/null | sort -V | tail -n 1)
+          APK=$(ls dist-teste/*.apk 2>/dev/null | sort -V | tail -n 1)
           [ -n "$APK" ] || { echo "nenhum APK em dist-teste/"; exit 0; }
           NAME=$(basename "$APK")
-          VER=${NAME#Hyper-Eternity-Relogios-}; VER=${VER%.apk}
+          VER=${NAME%.apk}; VER=${VER##*-}
           if ! gh release view relogios-teste -R "$REPO" >/dev/null 2>&1; then
             gh release create relogios-teste -R "$REPO" --target "$GITHUB_SHA" --prerelease \
               --title "Hyper Eternity Relógios (teste)" \
@@ -57,8 +57,8 @@ jobs:
           fi
           # só fica o APK mais novo
           for A in $(gh release view relogios-teste -R "$REPO" --json assets --jq '.assets[].name'); do
-            case "$A" in Hyper-Eternity-Relogios-*.apk) [ "$A" = "$NAME" ] || gh release delete-asset relogios-teste "$A" -R "$REPO" -y ;; esac
+            case "$A" in *.apk) [ "$A" = "$NAME" ] || gh release delete-asset relogios-teste "$A" -R "$REPO" -y ;; esac
           done
           gh release upload relogios-teste "$APK" -R "$REPO" --clobber
-          gh release edit relogios-teste -R "$REPO" --title "Hyper Eternity Relógios $VER (teste)"
+          gh release edit relogios-teste -R "$REPO" --title "Hyper Eternity Relógios: teste $VER"
           echo "publicado (teste): $NAME"
