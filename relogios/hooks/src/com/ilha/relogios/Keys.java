@@ -8,7 +8,7 @@ public final class Keys {
     public static final String FILE = "ajustes";
     /** Grupo das preferências remotas do LSPosed. */
     public static final String GROUP = "relogios";
-    public static final String VERSION = "1.7";
+    public static final String VERSION = "1.8";
 
     /** Editor do bloqueio oferece os modelos do HyperOS 4 (All in One). */
     public static final String EDITOR = "editor";
